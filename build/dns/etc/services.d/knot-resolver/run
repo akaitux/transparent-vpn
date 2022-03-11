@@ -1,0 +1,15 @@
+#!/command/with-contenv bash
+
+### KNOT
+#if [[ ! -d "/storage/confdb" ]]; then
+#    knotc conf-init
+#fi
+
+if [[ ! -f "/etc/knot-resolver/aliases/aliases.conf" ]]; then
+    cp /knot_aliases_default.conf /etc/knot-resolver/aliases/aliases.conf
+fi
+# Remove knot tmp and runtime
+rm -rf /tmp/knot-resolver/*
+rm -rf /run/knot-resolver/*
+
+kresd -c /etc/knot-resolver/kresd.conf -n /run/knot-resolver
