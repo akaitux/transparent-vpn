@@ -28,8 +28,9 @@ RUN \
 	gnupg \ 
     git \
     python3 \
-    knot-resolver \
+    python3-dnspython \
     python3-dnslib \
+    knot-resolver \
     gawk \
     dnsutils \
     procps \
@@ -43,6 +44,7 @@ RUN \
 	build-essential \
 	dkms \
 	jq \
+    idn \
     wireguard \
     wireguard-tools \
     && apt-get clean \
@@ -52,9 +54,9 @@ ADD https://github.com/just-containers/s6-overlay/releases/download/v${S6_OVERLA
 ADD https://github.com/just-containers/s6-overlay/releases/download/v${S6_OVERLAY_VERSION}/s6-overlay-x86_64.tar.xz /tmp
 RUN \
     tar -C / -Jxpf /tmp/s6-overlay-noarch.tar.xz \
-    && tar -C / -Jxpf /tmp/s6-overlay-x86_64.tar.xz
+    && tar -C / -Jxpf /tmp/s6-overlay-x86_64.tar.xz \
+    && ln -s /command/* /bin/
 
-RUN git clone https://bitbucket.org/anticensority/antizapret-pac-generator-light.git /antizapret
 
 RUN \
     mkdir -p /etc/knot-resolver/aliases \
@@ -73,11 +75,11 @@ COPY etc/knot/aliases.conf /knot_aliases_default.conf
 
 COPY opt/dnsmap /opt/dnsmap
 
-COPY etc/services.d /etc/services.d
-RUN find /etc/services.d -name run -exec chmod ug+x {} \;
-
 COPY etc/cont-init.d /etc/cont-init.d
-RUN find /etc/cont-init.d -type f -exec chmod ug+x {} \;
+RUN find /etc/cont-init.d -exec chmod ug+x {} \;
+
+COPY etc/services.d /etc/services.d
+RUN find /etc/services.d -exec chmod ug+x {} \;
 
 COPY defaults/ /defaults
 
@@ -85,8 +87,18 @@ RUN \
     chmod +x /opt/dnsmap/proxy.py \
     && chmod +x /opt/dnsmap/*.sh
 
+RUN \
+    git clone https://bitbucket.org/anticensority/antizapret-pac-generator-light.git /opt/antizapret \
+    && cd /opt/antizapret/config \
+    && cat ./include-hosts-dist.txt >> ./include-hosts-custom.txt && > ./include-hosts-dist.txt \
+    && cat ./include-ips-dist.txt >> ./include-ips-custom.txt && > ./include-ips-dist.txt \
+    && cat ./exclude-ips-dist.txt >> ./exclude-ips-custom.txt && > ./exclude-ips-dist.txt \
+    && cat ./exclude-hosts-dist.txt >> ./exclude-hosts-custom.txt && > ./exclude-hosts-dist.txt \
+    && cat ./exclude-hosts-by-ips-dist.txt >> ./exclude-hosts-by-ips-custom.txt && > ./exclude-hosts-by-ips-dist.txt \
+    && cd /opt/antizapret && mv config config_default
 
-
+COPY opt/antizapret/process.sh /opt/antizapret/process.sh
+RUN chmod +x /opt/antizapret/process.sh
 
 ENTRYPOINT ["/init"]
 

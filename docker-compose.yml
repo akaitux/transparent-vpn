@@ -5,19 +5,19 @@ services:
     restart: unless-stopped
     cap_add:
       - NET_ADMIN
-      - SYS_MODULE
+    #  - SYS_MODULE
     environment:
       - PUID=1000
       - PGID=1000
       - SERVERPORT=51820 
       - PEERS=5 
-      - INTERNAL_SUBNET=10.224.0.0/15
       - ALLOWEDIPS=0.0.0.0/0 
     volumes:
-      - /lib/modules:/lib/modules
+    # - /lib/modules:/lib/modules
       - wireguard_config:/config
       - knot_db:/var/lib/knot-resolver/storage
       - knot_aliases:/etc/knot-resolver/aliases
+      - antizapret_config:/opt/antizapret/config
     sysctls:
       - net.ipv4.conf.all.src_valid_mark=1
     ports:
@@ -26,3 +26,4 @@ volumes:
   wireguard_config:
   knot_db:
   knot_aliases:
+  antizapret_config:

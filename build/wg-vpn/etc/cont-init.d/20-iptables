@@ -1,4 +1,6 @@
-#!/bin/sh
+#!/command/with-contenv bash
+
+iptables -N azvpnwhitelist
 iptables -t nat -N dnsmap
 iptables -t nat -A PREROUTING -s 10.224.0.0/15 -d 10.224.0.0/15 -j dnsmap
 
