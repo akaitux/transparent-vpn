@@ -1,7 +1,8 @@
 version: '3.1'  
 services:  
-  wireguard:
-    build: ./build/wireguard
+  dns:
+    build: ./build/dns
+    restart: unless-stopped
     cap_add:
       - NET_ADMIN
       - SYS_MODULE
@@ -13,24 +14,12 @@ services:
       - INTERNAL_SUBNET=10.224.0.0/15
       - ALLOWEDIPS=0.0.0.0/0 
     volumes:
-      - wireguard_config:/config
       - /lib/modules:/lib/modules
-    ports:
-      - 51820:51820/udp
+      - wireguard_config:/config
+      - knot_db:/var/lib/knot-resolver/storage
+      - knot_aliases:/etc/knot-resolver/aliases
     sysctls:
       - net.ipv4.conf.all.src_valid_mark=1
-    restart: unless-stopped
-  dns:
-    build: ./build/dns
-    restart: unless-stopped
-    cap_add:
-      - NET_ADMIN
-    network_mode: service:wireguard
-    depends_on:
-      - wireguard
-    volumes:
-     - knot_db:/var/lib/knot-resolver/storage
-     - knot_aliases:/etc/knot-resolver/aliases
 volumes:
   wireguard_config:
   knot_db:

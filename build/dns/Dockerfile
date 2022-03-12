@@ -1,21 +1,34 @@
 FROM debian:bullseye-slim
 ARG S6_OVERLAY_VERSION=3.1.0.1
+ARG WIREGUARD_RELEASE
 
+ENV DEBIAN_FRONTEND="noninteractive"
+
+# FOR KNOT
 RUN \
     apt-get update \
     && apt-get install -y curl \
     && curl https://secure.nic.cz/files/knot-resolver/knot-resolver-release.deb -o knot-resolver-release.deb \
     && dpkg -i knot-resolver-release.deb \
     && apt-get update \
-    && apt -o Dpkg::Options::="--force-confold" -y full-upgrade \
+    && apt-get -o Dpkg::Options::="--force-confold" -y full-upgrade \
     && rm -f knot-resolver-release.deb \
     && apt-get install -y \
     iptables \
     iproute2 \
+	ifupdown \
+	iputils-ping \
+	libc6 \
+	libelf-dev \
+	net-tools \
+	openresolv \
+	perl \
+	pkg-config \
+	qrencode \
+	gnupg \ 
     git \
     python3 \
     knot-resolver \
-    inetutils-ping \
     python3-dnslib \
     gawk \
     dnsutils \
@@ -25,6 +38,13 @@ RUN \
     ipcalc \
     vim \
     xz-utils \
+    iputils-ping \
+	bc \
+	build-essential \
+	dkms \
+	jq \
+    wireguard \
+    wireguard-tools \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
 
@@ -56,6 +76,11 @@ COPY opt/dnsmap /opt/dnsmap
 COPY etc/services.d /etc/services.d
 RUN find /etc/services.d -name run -exec chmod ug+x {} \;
 
+COPY etc/cont-init.d /etc/cont-init.d
+RUN find /etc/cont-init.d -type f -exec chmod ug+x {} \;
+
+COPY defaults/ /defaults
+
 RUN \
     chmod +x /opt/dnsmap/proxy.py \
     && chmod +x /opt/dnsmap/*.sh
@@ -64,5 +89,4 @@ RUN \
 
 
 ENTRYPOINT ["/init"]
-
 
