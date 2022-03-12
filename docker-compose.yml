@@ -1,7 +1,7 @@
 version: '3.1'  
 services:  
-  dns:
-    build: ./build/dns
+  trsp-wg-vpn:
+    build: ./build/wg-vpn
     restart: unless-stopped
     cap_add:
       - NET_ADMIN
@@ -20,6 +20,8 @@ services:
       - knot_aliases:/etc/knot-resolver/aliases
     sysctls:
       - net.ipv4.conf.all.src_valid_mark=1
+    ports:
+      - 0.0.0.0:51820:51820/udp
 volumes:
   wireguard_config:
   knot_db:
