@@ -1,0 +1,5 @@
+#!/bin/sh
+iptables -t nat -F dnsmap 2>/dev/null|| true
+iptables -t nat -N dnsmap
+iptables -t nat -A PREROUTING -s 10.224.0.0/15 -d 10.224.0.0/15 -j dnsmap
+
