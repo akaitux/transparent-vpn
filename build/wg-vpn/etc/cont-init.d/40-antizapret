@@ -1,9 +1,17 @@
-#!/bin/bash
-##!/command/with-contenv bash
-
-if [ ! -f /opt/antizapret/config/config.sh ]; then
+#!/command/with-contenv bash
+if [[ ! -f /opt/antizapret/config/config.sh ]] || [[ "$ANZ_REBUILD_CONFIG" == *"yes"* ]]; then
     echo "#### Init antizapret ####"
     mkdir -p /opt/antizapret/config
-    cp /opt/antizapret/config_default/* /opt/antizapret/config/
+
+    cp -n /opt/antizapret/config_default/config.sh /opt/antizapret/config/
+
+    if [[ "$ANZ_RESOLVE_NXDOMAIN" == *"yes"* ]]; then
+        sed -i -e 's/RESOLVE_NXDOMAIN=.*/RESOLVE_NXDOMAIN="yes"/g' /opt/antizapret/config/config.sh
+    else
+        sed -i -e 's/RESOLVE_NXDOMAIN=.*/RESOLVE_NXDOMAIN="no"/g' /opt/antizapret/config/config.sh
+    fi
+
+    cp -n /opt/antizapret/config_default/* /opt/antizapret/config/
 fi
-nohup /opt/antizapret/doall.sh 2>&1 >/dev/null &
+
+/opt/antizapret/doall.sh &

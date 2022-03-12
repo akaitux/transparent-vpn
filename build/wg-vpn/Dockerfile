@@ -45,6 +45,7 @@ RUN \
 	dkms \
 	jq \
     idn \
+    sipcalc \
     wireguard \
     wireguard-tools \
     && apt-get clean \

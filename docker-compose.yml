@@ -12,6 +12,9 @@ services:
       - SERVERPORT=51820 
       - PEERS=5 
       - ALLOWEDIPS=0.0.0.0/0 
+      - ANZ_REBUILD_CONFIG="yes"
+      - ANZ_RESOLVE_NXDOMAIN="no"
+
     volumes:
     # - /lib/modules:/lib/modules
       - wireguard_config:/config
