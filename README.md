@@ -1,6 +1,6 @@
 VPN
 
-Схема аналогична работе https://antizapret.prostovpn.org/
+Схема аналогична работе https://antizapret.prostovpn.org/ (https://bitbucket.org/anticensority/antizapret-vpn-container/src/master/)
 
 Для установки на VPS - `docker-compuse up -d` (требуются дополнительные тесты на разных ОС, проверялось на ubuntu 20.04)
 
