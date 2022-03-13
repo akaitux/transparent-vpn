@@ -10,5 +10,5 @@ VPN
 
 2. Скопировать файл `keenetic/opt/etc/ndm/ifstatechanged.d/wg-trsp.sh` из репозитория в `/opt/etc/ndm/ifstatechanged.d/wg-trsp.sh` opkg раздела. Он позволит перенаправлять DNS запросы к внутреннему резолверу при включении интерфейса и убирать перенаправление при его выключении.
 
-3. Сконфигурировать wireguard клиента в web интерфейсе роутера, где приватный ключ (для peer1) - `/opt/wireguard/config/peer1/privatekey-peer1`, публичный ключ сервера - `/opt/wireguard/config/server/publickey-server`. Адрес - `10.224.0.2/15`.
+3. Сконфигурировать wireguard клиент в web интерфейсе роутера, где приватный ключ (для peer1) - `/opt/wireguard/config/peer1/privatekey-peer1`, публичный ключ сервера - `/opt/wireguard/config/server/publickey-server`. Адрес - `10.224.0.2/15`.
 
