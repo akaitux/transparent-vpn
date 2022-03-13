@@ -82,7 +82,6 @@ RUN find /etc/cont-init.d -exec chmod ug+x {} \;
 COPY etc/services.d /etc/services.d
 RUN find /etc/services.d -exec chmod ug+x {} \;
 
-COPY defaults/ /defaults
 
 RUN \
     chmod +x /opt/dnsmap/proxy.py \
@@ -99,7 +98,14 @@ RUN \
     && cd /opt/antizapret && mv config config_default
 
 COPY opt/antizapret/process.sh /opt/antizapret/process.sh
-RUN chmod +x /opt/antizapret/process.sh
+RUN \
+    chmod +x /opt/antizapret/process.sh \
+    && mkdir /etc/antizapret \
+    && ln -s /opt/antizapret/config
+
+COPY opt/wireguard /opt/wireguard
+
+COPY etc/crontab /etc/crontab
 
 ENTRYPOINT ["/init"]
 

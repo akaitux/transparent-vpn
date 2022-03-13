@@ -1,6 +1,6 @@
 #!/command/with-contenv bash
 
-mkdir -p /config/wireguard/templates
+mkdir -p /opt/wireguard/{config,templates,defaults}
 
 echo "Uname info: $(uname -a)"
 # check for wireguard module

@@ -1,14 +1,14 @@
 #!/command/with-contenv bash
 
 generate_confs () {
-  mkdir -p /config/wireguard/server
-  if [ ! -f /config/wireguard/server/privatekey-server ]; then
+  mkdir -p /opt/wireguard/config/server
+  if [ ! -f /opt/wireguard/config/server/privatekey-server ]; then
     umask 077
-    wg genkey | tee /config/wireguard/server/privatekey-server | wg pubkey > /config/wireguard/server/publickey-server
+    wg genkey | tee /opt/wireguard/config/server/privatekey-server | wg pubkey > /opt/wireguard/config/server/publickey-server
   fi
   eval "`printf %s`
-  cat <<DUDE > /config/wireguard/wg0.conf
-`cat /config/wireguard/templates/server.conf`
+  cat <<DUDE > /opt/wireguard/config/wg0.conf
+`cat /opt/wireguard/templates/server.conf`
 
 DUDE"
   for i in ${PEERS_ARRAY[@]}; do
@@ -17,56 +17,56 @@ DUDE"
     else
       PEER_ID="peer_${i//[^[:alnum:]_-]/}"
     fi
-    mkdir -p /config/wireguard/${PEER_ID}
-    if [ ! -f "/config/wireguard/${PEER_ID}/privatekey-${PEER_ID}" ]; then
+    mkdir -p /opt/wireguard/config/${PEER_ID}
+    if [ ! -f "/opt/wireguard/config/${PEER_ID}/privatekey-${PEER_ID}" ]; then
       umask 077
-      wg genkey | tee /config/wireguard/${PEER_ID}/privatekey-${PEER_ID} | wg pubkey > /config/wireguard/${PEER_ID}/publickey-${PEER_ID}
+      wg genkey | tee /opt/wireguard/config/${PEER_ID}/privatekey-${PEER_ID} | wg pubkey > /opt/wireguard/config/${PEER_ID}/publickey-${PEER_ID}
     fi
-    if [ -f "/config/wireguard/${PEER_ID}/${PEER_ID}.conf" ]; then
-      CLIENT_IP=$(cat /config/wireguard/${PEER_ID}/${PEER_ID}.conf | grep "Address" | awk '{print $NF}')
+    if [ -f "/opt/wireguard/config/${PEER_ID}/${PEER_ID}.conf" ]; then
+      CLIENT_IP=$(cat /opt/wireguard/config/${PEER_ID}/${PEER_ID}.conf | grep "Address" | awk '{print $NF}')
       if [ -n "${ORIG_INTERFACE}" ] && [ "${INTERFACE}" != "${ORIG_INTERFACE}" ]; then
         CLIENT_IP=$(echo "${CLIENT_IP}" | sed "s|${ORIG_INTERFACE}|${INTERFACE}|")
       fi
     else
       for idx in {2..254}; do
         PROPOSED_IP="${INTERFACE}.${idx}"
-        if ! grep -q -R "${PROPOSED_IP}" /config/wireguard/peer*/*.conf && ([ -z "${ORIG_INTERFACE}" ] || ! grep -q -R "${ORIG_INTERFACE}.${idx}" /config/wireguard/peer*/*.conf); then
+        if ! grep -q -R "${PROPOSED_IP}" /opt/wireguard/config/peer*/*.conf && ([ -z "${ORIG_INTERFACE}" ] || ! grep -q -R "${ORIG_INTERFACE}.${idx}" /opt/wireguard/config/peer*/*.conf); then
           CLIENT_IP="${PROPOSED_IP}"
           break
         fi
       done
     fi
     eval "`printf %s`
-    cat <<DUDE > /config/wireguard/${PEER_ID}/${PEER_ID}.conf
-`cat /config/wireguard/templates/peer.conf`
+    cat <<DUDE > /opt/wireguard/config/${PEER_ID}/${PEER_ID}.conf
+`cat /opt/wireguard/templates/peer.conf`
 DUDE"
     SERVER_ALLOWEDIPS=SERVER_ALLOWEDIPS_PEER_${i}
     if [ -n "${!SERVER_ALLOWEDIPS}" ]; then
       echo "Adding ${!SERVER_ALLOWEDIPS} to wg0.conf's AllowedIPs for peer ${i}"
-      cat <<DUDE >> /config/wireguard/wg0.conf
+      cat <<DUDE >> /opt/wireguard/config/wg0.conf
 [Peer]
 # ${PEER_ID}
-PublicKey = $(cat /config/wireguard/${PEER_ID}/publickey-${PEER_ID})
+PublicKey = $(cat /opt/wireguard/config/${PEER_ID}/publickey-${PEER_ID})
 AllowedIPs = ${CLIENT_IP}/32,${!SERVER_ALLOWEDIPS}
 
 DUDE
     else
-      cat <<DUDE >> /config/wireguard/wg0.conf
+      cat <<DUDE >> /opt/wireguard/config/wg0.conf
 [Peer]
 # ${PEER_ID}
-PublicKey = $(cat /config/wireguard/${PEER_ID}/publickey-${PEER_ID})
+PublicKey = $(cat /opt/wireguard/config/${PEER_ID}/publickey-${PEER_ID})
 AllowedIPs = ${CLIENT_IP}/32
 
 DUDE
     fi
     echo "PEER ${i} QR code:"
-    qrencode -t ansiutf8 < /config/wireguard/${PEER_ID}/${PEER_ID}.conf
-    qrencode -o /config/wireguard/${PEER_ID}/${PEER_ID}.png < /config/wireguard/${PEER_ID}/${PEER_ID}.conf
+    qrencode -t ansiutf8 < /opt/wireguard/config/${PEER_ID}/${PEER_ID}.conf
+    qrencode -o /opt/wireguard/config/${PEER_ID}/${PEER_ID}.png < /opt/wireguard/config/${PEER_ID}/${PEER_ID}.conf
   done
 }
 
 save_vars () {
-  cat <<DUDE > /config/wireguard/.donoteditthisfile
+  cat <<DUDE > /opt/wireguard/config/.donoteditthisfile
 ORIG_SERVERURL="$SERVERURL"
 ORIG_SERVERPORT="$SERVERPORT"
 ORIG_PEERDNS="$PEERDNS"
@@ -82,12 +82,12 @@ DUDE
 # prepare symlinks
 rm -rf /etc/wireguard
 mkdir -p /etc/wireguard
-ln -s /config/wireguard/wg0.conf /etc/wireguard/wg0.conf
+ln -s /opt/wireguard/config/wg0.conf /etc/wireguard/wg0.conf
 # prepare templates
-[[ ! -f /config/wireguard/templates/server.conf ]] && \
-  cp /defaults/wireguard/server.conf /config/wireguard/templates/server.conf
-[[ ! -f /config/wireguard/templates/peer.conf ]] && \
-  cp /defaults/wireguard/peer.conf /config/wireguard/templates/peer.conf
+[[ ! -f /opt/wireguard/templates/server.conf ]] && \
+  cp /opt/wireguard/defaults/server.conf /opt/wireguard/templates/server.conf
+[[ ! -f /opt/wireguard/templates/peer.conf ]] && \
+  cp /opt/wireguard/defaults/peer.conf /opt/wireguard/templates/peer.conf
 
 if [ -n "$PEERS" ]; then
   echo "**** Server mode is selected ****"
@@ -116,14 +116,14 @@ if [ -n "$PEERS" ]; then
   else
     echo "**** Peer DNS servers will be set to $PEERDNS ****"
   fi
-  if [ ! -f /config/wireguard/wg0.conf ]; then
+  if [ ! -f /opt/wireguard/config/wg0.conf ]; then
     echo "**** No wg0.conf found (maybe an initial install), generating 1 server and ${PEERS} peer/client confs ****"
     generate_confs
     save_vars
   else
     echo "**** Server mode is selected ****"
-    [[ -f /config/wireguard/.donoteditthisfile ]] && \
-      . /config/wireguard/.donoteditthisfile
+    [[ -f /opt/wireguard/config/.donoteditthisfile ]] && \
+      . /opt/wireguard/config/.donoteditthisfile
     if [ "$SERVERURL" != "$ORIG_SERVERURL" ] || [ "$SERVERPORT" != "$ORIG_SERVERPORT" ] || [ "$PEERDNS" != "$ORIG_PEERDNS" ] || [ "$PEERS" != "$ORIG_PEERS" ] || [ "$INTERFACE" != "$ORIG_INTERFACE" ] || [ "$ALLOWEDIPS" != "$ORIG_ALLOWEDIPS" ]; then
       echo "**** Server related environment variables changed, regenerating 1 server and ${PEERS} peer/client confs ****"
       generate_confs
@@ -134,8 +134,8 @@ if [ -n "$PEERS" ]; then
   fi
 else
   echo "**** Client mode selected. ****"
-  if [ ! -f /config/wireguard/wg0.conf ]; then
-    echo "**** No client conf found. Provide your own client conf as \"/config/wireguard/wg0.conf\" and restart the container. ****"
+  if [ ! -f /opt/wireguard/config/wg0.conf ]; then
+    echo "**** No client conf found. Provide your own client conf as \"/opt/wireguard/config/wg0.conf\" and restart the container. ****"
     sleep infinity
   fi
 fi

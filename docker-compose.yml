@@ -17,7 +17,7 @@ services:
 
     volumes:
     # - /lib/modules:/lib/modules
-      - wireguard_config:/config
+      - wireguard_config:/opt/wireguard/config
       - knot_db:/var/lib/knot-resolver/storage
       - knot_aliases:/etc/knot-resolver/aliases
       - antizapret_config:/opt/antizapret/config
