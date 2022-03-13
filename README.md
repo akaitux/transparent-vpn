@@ -2,7 +2,7 @@ VPN
 
 Схема аналогична работе https://bitbucket.org/anticensority/antizapret-vpn-container/src/master/
 
-Для установки на VPS - `docker-compuse up -d` (требуются дополнительные тесты на разных ОС, проверялось на ubuntu 20.04)
+Для установки на VPS - `docker-compose up -d` (требуются дополнительные тесты на разных ОС, проверялось на ubuntu 20.04)
 
 Для установки прозрачного прокси на keenetic роутер:
 
