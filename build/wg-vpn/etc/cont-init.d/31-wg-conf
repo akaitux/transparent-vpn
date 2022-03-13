@@ -67,12 +67,12 @@ DUDE
 
 save_vars () {
   cat <<DUDE > /opt/wireguard/config/.donoteditthisfile
-ORIG_SERVERURL="$SERVERURL"
-ORIG_SERVERPORT="$SERVERPORT"
-ORIG_PEERDNS="$PEERDNS"
-ORIG_PEERS="$PEERS"
+ORIG_SERVERURL="$WG_SERVERURL"
+ORIG_SERVERPORT="$WG_SERVERPORT"
+ORIG_PEERDNS="$WG_PEERDNS"
+ORIG_PEERS="$WG_PEERS"
 ORIG_INTERFACE="$INTERFACE"
-ORIG_ALLOWEDIPS="$ALLOWEDIPS"
+ORIG_ALLOWEDIPS="$WG_ALLOWEDIPS"
 DUDE
 }
 
@@ -89,43 +89,43 @@ ln -s /opt/wireguard/config/wg0.conf /etc/wireguard/wg0.conf
 [[ ! -f /opt/wireguard/templates/peer.conf ]] && \
   cp /opt/wireguard/defaults/peer.conf /opt/wireguard/templates/peer.conf
 
-if [ -n "$PEERS" ]; then
+if [ -n "$WG_PEERS" ]; then
   echo "**** Server mode is selected ****"
-  if [[ "$PEERS" =~ ^[0-9]+$ ]] && ! [[ "$PEERS" =~ *,* ]]; then
-    PEERS_ARRAY=($(seq 1 $PEERS))
+  if [[ "$WG_PEERS" =~ ^[0-9]+$ ]] && ! [[ "$WG_PEERS" =~ *,* ]]; then
+    PEERS_ARRAY=($(seq 1 $WG_PEERS))
   else
-    PEERS_ARRAY=($(echo "$PEERS" | tr ',' ' '))
+    PEERS_ARRAY=($(echo "$WG_PEERS" | tr ',' ' '))
   fi
   PEERS_COUNT=$(echo "${#PEERS_ARRAY[@]}")
-  if [ -z "$SERVERURL" ] || [ "$SERVERURL" = "auto" ]; then
-    SERVERURL=$(curl -s icanhazip.com)
-    echo "**** SERVERURL var is either not set or is set to \"auto\", setting external IP to auto detected value of $SERVERURL ****"
+  if [ -z "$WG_SERVERURL" ] || [ "$WG_SERVERURL" = "auto" ]; then
+    WG_SERVERURL=$(curl -s icanhazip.com)
+    echo "**** WG_SERVERURL var is either not set or is set to \"auto\", setting external IP to auto detected value of $WG_SERVERURL ****"
   else
-    echo "**** External server address is set to $SERVERURL ****"
+    echo "**** External server address is set to $WG_SERVERURL ****"
   fi
-  SERVERPORT=${SERVERPORT:-51820}
-  echo "**** External server port is set to ${SERVERPORT}. Make sure that port is properly forwarded to port 51820 inside this container ****"
+  WG_SERVERPORT=${WG_SERVERPORT:-51820}
+  echo "**** External server port is set to ${WG_SERVERPORT}. Make sure that port is properly forwarded to port 51820 inside this container ****"
   INTERNAL_SUBNET="10.224.0.0/15"
   echo "**** Internal subnet is set to $INTERNAL_SUBNET ****"
   INTERFACE=$(echo "$INTERNAL_SUBNET" | awk 'BEGIN{FS=OFS="."} NF--')
-  ALLOWEDIPS=${ALLOWEDIPS:-0.0.0.0/0, ::/0}
-  echo "**** AllowedIPs for peers $ALLOWEDIPS ****"
-  if [ -z "$PEERDNS" ] || [ "$PEERDNS" = "auto" ]; then
-    PEERDNS="${INTERFACE}.1"
-    echo "**** PEERDNS var is either not set or is set to \"auto\", setting peer DNS to ${INTERFACE}.1 to use wireguard docker host's DNS. ****"
+  WG_ALLOWEDIPS=${WG_ALLOWEDIPS:-0.0.0.0/0, ::/0}
+  echo "**** AllowedIPs for peers $WG_ALLOWEDIPS ****"
+  if [ -z "$WG_PEERDNS" ] || [ "$WG_PEERDNS" = "auto" ]; then
+    WG_PEERDNS="${INTERFACE}.1"
+    echo "**** WG_PEERDNS var is either not set or is set to \"auto\", setting peer DNS to ${INTERFACE}.1 to use wireguard docker host's DNS. ****"
   else
-    echo "**** Peer DNS servers will be set to $PEERDNS ****"
+    echo "**** Peer DNS servers will be set to $WG_PEERDNS ****"
   fi
   if [ ! -f /opt/wireguard/config/wg0.conf ]; then
-    echo "**** No wg0.conf found (maybe an initial install), generating 1 server and ${PEERS} peer/client confs ****"
+    echo "**** No wg0.conf found (maybe an initial install), generating 1 server and ${WG_PEERS} peer/client confs ****"
     generate_confs
     save_vars
   else
     echo "**** Server mode is selected ****"
     [[ -f /opt/wireguard/config/.donoteditthisfile ]] && \
       . /opt/wireguard/config/.donoteditthisfile
-    if [ "$SERVERURL" != "$ORIG_SERVERURL" ] || [ "$SERVERPORT" != "$ORIG_SERVERPORT" ] || [ "$PEERDNS" != "$ORIG_PEERDNS" ] || [ "$PEERS" != "$ORIG_PEERS" ] || [ "$INTERFACE" != "$ORIG_INTERFACE" ] || [ "$ALLOWEDIPS" != "$ORIG_ALLOWEDIPS" ]; then
-      echo "**** Server related environment variables changed, regenerating 1 server and ${PEERS} peer/client confs ****"
+    if [ "$WG_SERVERURL" != "$ORIG_SERVERURL" ] || [ "$WG_SERVERPORT" != "$ORIG_SERVERPORT" ] || [ "$WG_PEERDNS" != "$ORIG_PEERDNS" ] || [ "$WG_PEERS" != "$ORIG_PEERS" ] || [ "$INTERFACE" != "$ORIG_INTERFACE" ] || [ "$WG_ALLOWEDIPS" != "$ORIG_ALLOWEDIPS" ]; then
+      echo "**** Server related environment variables changed, regenerating 1 server and ${WG_PEERS} peer/client confs ****"
       generate_confs
       save_vars
     else

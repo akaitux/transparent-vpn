@@ -1,4 +1,8 @@
 #!/command/with-contenv bash
+if [[ "$ANZ_DISABLED" == *"yes"* ]]; then
+    echo "### Pass antizapret ####"
+    exit 0
+fi
 if [[ ! -f /opt/antizapret/config/config.sh ]] || [[ "$ANZ_REBUILD_CONFIG" == *"yes"* ]]; then
     echo "#### Init antizapret ####"
     mkdir -p /opt/antizapret/config

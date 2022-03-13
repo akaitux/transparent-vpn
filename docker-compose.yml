@@ -7,13 +7,12 @@ services:
       - NET_ADMIN
     #  - SYS_MODULE
     environment:
-      - PUID=1000
-      - PGID=1000
-      - SERVERPORT=51820 
-      - PEERS=5 
-      - ALLOWEDIPS=0.0.0.0/0 
+      - WG_SERVERPORT=51820 
+      - WG_PEERS=5 
+      - WG_ALLOWEDIPS=0.0.0.0/0 
       - ANZ_REBUILD_CONFIG="no"
       - ANZ_RESOLVE_NXDOMAIN="no"
+      - ANZ_DISABLED="no"
 
     volumes:
     # - /lib/modules:/lib/modules
