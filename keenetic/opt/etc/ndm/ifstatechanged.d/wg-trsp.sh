@@ -1,6 +1,6 @@
 #!/bin/sh
 
-WG_IF="nwg1"
+WG_IF="nwg0"
 WG_DNS="10.224.0.1"
 
 if [ ! "$system_name" == "$WG_IF" ]; then
@@ -11,11 +11,11 @@ if_dnat_exists=`iptables -t nat -L -n | grep "to:${WG_DNS}:53" >/dev/null ; echo
 
 if [ "$link" == "up" ] && [ "$connected" == "yes" ]; then
     if [ ! "$if_dnat_exists" = 0 ]; then
-    	iptables -t nat -I PREROUTING -p udp -m udp --dport 53 -j DNAT --to-destination $WG_DNS:53 2>&1
+    	iptables -t nat -I PREROUTING -p udp -m udp --dport 53 -j DNAT --to-destination $WG_DNS:53
     fi
 fi
 
 if [ "$connected" == "no" ]; then
-    iptables -t nat -D PREROUTING -p udp -m udp --dport 53 -j DNAT --to-destination $WG_DNS:53 2>&1
+    iptables -t nat -D PREROUTING -p udp -m udp --dport 53 -j DNAT --to-destination $WG_DNS:53
 fi
 
