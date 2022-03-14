@@ -1,5 +1,5 @@
 #!/bin/sh
-WG_IF=`ip -o -4 addr show | grep "10\.224\.0" | awk '{print $2}'`
+WG_IF=`ip -o -4 addr show | egrep "10\.224\.0\.[0-9]{1,3}\/15" | awk '{print $2}'`
 WG_DNS="10.224.0.1"
 
 is_interface_up=`ip a show "$WG_IF" up | grep UP &>/dev/null ; echo $?`
