@@ -1,6 +1,6 @@
 #!/bin/sh
 
-WG_IF="nwg0"
+WG_IF=`ip -o -4 addr show | grep "10\.224\.0" | awk '{print $2}'`
 WG_DNS="10.224.0.1"
 
 if [ ! "$system_name" == "$WG_IF" ]; then
