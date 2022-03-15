@@ -13,7 +13,7 @@ services:
       - ANZ_REBUILD_CONFIG="no"
       - ANZ_RESOLVE_NXDOMAIN="no"
       - ANZ_DISABLED="no"
-      #- DNSMAP_DNS_UPSTREAM=1.1.1.1:53
+      #- DNSMAP_DNS_UPSTREAM="1.1.1.1:53"
 
     volumes:
     # - /lib/modules:/lib/modules
