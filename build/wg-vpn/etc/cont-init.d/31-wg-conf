@@ -108,7 +108,7 @@ if [ -n "$WG_PEERS" ]; then
   INTERNAL_SUBNET="10.224.0.0/15"
   echo "**** Internal subnet is set to $INTERNAL_SUBNET ****"
   INTERFACE=$(echo "$INTERNAL_SUBNET" | awk 'BEGIN{FS=OFS="."} NF--')
-  WG_ALLOWEDIPS=${WG_ALLOWEDIPS:-0.0.0.0/0, ::/0}
+  WG_ALLOWEDIPS=${WG_ALLOWEDIPS:-0.0.0.0/0}
   echo "**** AllowedIPs for peers $WG_ALLOWEDIPS ****"
   if [ -z "$WG_PEERDNS" ] || [ "$WG_PEERDNS" = "auto" ]; then
     WG_PEERDNS="${INTERFACE}.1"

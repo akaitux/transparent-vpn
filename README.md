@@ -1,5 +1,7 @@
 VPN
 
+Предназначен прежде всего для настройки 'прозрачного' VPN на роутере.
+
 Схема аналогична работе https://bitbucket.org/anticensority/antizapret-vpn-container/src/master/
 
 Различия:
