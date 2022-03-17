@@ -12,5 +12,5 @@ if [ "$is_interface_up" == "0" ]; then
 fi
 
 if [ "$is_interface_up" == "1" ]; then
-    iptables -t nat -D PREROUTING -p udp -m udp --dport 53 -j DNAT --to-destination $WG_DNS:53 2>&1
+    iptables -t nat -D PREROUTING -p udp -m udp --dport 53 -j DNAT --to-destination $WG_DNS:53
 fi
