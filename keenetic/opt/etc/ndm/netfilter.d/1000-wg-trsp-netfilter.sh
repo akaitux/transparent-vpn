@@ -7,10 +7,10 @@ is_dnat_exists=`iptables -t nat -L -n | grep "to:${WG_DNS}:53" >/dev/null ; echo
 
 if [ "$is_interface_up" == "0" ]; then
     if [ ! "$is_dnat_exists" = 0 ]; then
-    	iptables -t nat -I PREROUTING -p udp -m udp --dport 53 -j DNAT --to-destination $WG_DNS:53 2>&1 >> /tmp/hey
+    	iptables -t nat -I PREROUTING -p udp -m udp --dport 53 -j DNAT --to-destination $WG_DNS:53
     fi
 fi
 
 if [ "$is_interface_up" == "1" ]; then
-    iptables -t nat -D PREROUTING -p udp -m udp --dport 53 -j DNAT --to-destination $WG_DNS:53 2>&1 >> /tmp/hey
+    iptables -t nat -D PREROUTING -p udp -m udp --dport 53 -j DNAT --to-destination $WG_DNS:53 2>&1
 fi
