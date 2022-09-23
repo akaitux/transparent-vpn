@@ -13,7 +13,5 @@ async fn main() -> Result<(), std::io::Error> {
     println!("Listen on {}:{}", settings.server.ip, settings.server.port);
     Server::new(TcpListener::bind(
         format!("{}:{}", settings.server.ip, settings.server.port))
-    )
-        .run(app)
-        .await
+    ).run(app).await
 }
