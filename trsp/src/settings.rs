@@ -5,7 +5,7 @@ use std::sync::RwLock;
 
 
 lazy_static! {
-    static ref SETTINGS: RwLock<Settings> = RwLock::new(Settings::new().expect("Error while load config"));
+    pub static ref SETTINGS: RwLock<Settings> = RwLock::new(Settings::new().expect("Error while load config"));
 }
 
 
