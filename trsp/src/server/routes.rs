@@ -1,7 +1,20 @@
-use poem::{get, Route};
-use crate::server::views;
+use poem::{
+    Route,
+    endpoint::{EmbeddedFileEndpoint, EmbeddedFilesEndpoint},
+};
+
+// use crate::server::views;
+use rust_embed::RustEmbed;
+
+
+#[derive(RustEmbed)]
+#[folder = "front"]
+pub struct Files;
+
 
 pub fn get_routes() -> Route {
     Route::new()
-        .at("/", get(views::root))
+        .at("/", EmbeddedFileEndpoint::<Files>::new("index.html"))
+        .nest("/static", EmbeddedFilesEndpoint::<Files>::new())
+        //.at("/root", get(views::root))
 }
