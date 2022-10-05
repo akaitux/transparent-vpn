@@ -29,7 +29,7 @@ fn install_npm_packages() {
         panic!("{:?}", status);
     }
 
-    fs::copy("dist/index.html", "static/html/index.html").unwrap();
+    fs::copy("dist/index.html", "static/index.html").unwrap();
 
     let mut options = fs_extra::dir::CopyOptions::new();
     options.overwrite = true;
