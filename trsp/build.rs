@@ -35,6 +35,8 @@ fn install_npm_packages() {
     options.overwrite = true;
     fs_extra::dir::copy("dist/js", "static/", &options).unwrap();
 
+    fs::remove_dir_all("dist/").unwrap();
+
 //    Command::new("npm")
 //        .args(["run", "build"])
 //        .spawn()

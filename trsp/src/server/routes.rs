@@ -14,7 +14,7 @@ pub struct Files;
 
 pub fn get_routes() -> Route {
     Route::new()
-        .at("/", EmbeddedFileEndpoint::<Files>::new("index.html"))
+        .at("/", EmbeddedFileEndpoint::<Files>::new("html/index.html"))
         .nest("/static", EmbeddedFilesEndpoint::<Files>::new())
         //.at("/root", get(views::root))
 }
