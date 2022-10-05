@@ -18,4 +18,6 @@ if [[ ! -f /opt/antizapret/config/config.sh ]] || [[ "$ANZ_REBUILD_CONFIG" == *"
     cp -n /opt/antizapret/config_default/* /opt/antizapret/config/
 fi
 
-/opt/antizapret/doall.sh &
+chown -R vpn:vpn /opt/antizapret
+chown vpn:vpn /etc/knot-resolver/aliases/aliases.conf
+su - vpn -c '/opt/antizapret/doall.sh' &

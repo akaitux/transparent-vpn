@@ -9,6 +9,11 @@ fn install_npm_packages() {
     front_dir.push("front");
     assert!(env::set_current_dir(&(front_dir.as_path())).is_ok());
 
+    Command::new("echo")
+        .arg(format!("install_npm -> YOOOBA"))
+        .spawn()
+        .expect("failed to spawn process");
+
     let exit_status = NpmEnv::default()
         .with_node_env(&NodeEnv::Production)
         .init_env()

@@ -25,7 +25,7 @@ RUN \
 	perl \
 	pkg-config \
 	qrencode \
-	gnupg \ 
+	gnupg \
     git \
     python3 \
     python3-dnspython \
@@ -96,10 +96,14 @@ RUN \
     && cd /opt/antizapret && mv config config_default
 
 COPY opt/antizapret/process.sh /opt/antizapret/process.sh
+COPY etc/sudoers.d/vpn /etc/sudoers.d/
 RUN \
-    chmod +x /opt/antizapret/process.sh \
+    useradd -u 2000 -M vpn \
+    && usermod -a -G knot-resolver vpn \
+    && chmod +x /opt/antizapret/process.sh \
     && mkdir /etc/antizapret \
-    && ln -s /opt/antizapret/config
+    && ln -s /opt/antizapret/config \
+    && chown -R vpn:vpn /opt/antizapret
 
 COPY opt/wireguard /opt/wireguard
 
