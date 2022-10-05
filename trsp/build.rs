@@ -1,28 +1,46 @@
 use npm_rs::{NpmEnv, NodeEnv};
 use std::env;
-use std::process::Command;
+use std::fs;
+use fs_extra;
+// use std::process::Command;
+
+// https://github.com/bbachi/vuejs-nginx-docker
 
 
 fn install_npm_packages() {
+
     let current_dir = env::current_dir().unwrap();
     let mut front_dir = env::current_dir().unwrap();
     front_dir.push("front");
     assert!(env::set_current_dir(&(front_dir.as_path())).is_ok());
 
-    let exit_status = NpmEnv::default()
+    // println!("cargo:rerun-if-changed={:?}", front_dir.push("package.json"));
+
+    let status = NpmEnv::default()
         .with_node_env(&NodeEnv::Production)
         .init_env()
         .install(None)
-        .exec().expect("Failed to install npm packages");
+        .run("build")
+        .exec().unwrap_or_else(|error| {
+            panic!("{:?}", error)
+    });
 
-    if ! exit_status.success() {
-        panic!("{}", format!("NPM Error: {}", exit_status));
+    if ! status.success() {
+        panic!("{:?}", status);
     }
 
-    Command::new("echo")
-        .arg(format!("install_npm -> {}", exit_status))
-        .spawn()
-        .expect("failed to spawn process");
+    fs::copy("dist/index.html", "static/html/index.html").unwrap();
+
+    let mut options = fs_extra::dir::CopyOptions::new();
+    options.overwrite = true;
+    fs_extra::dir::copy("dist/js", "static/", &options).unwrap();
+
+//    Command::new("npm")
+//        .args(["run", "build"])
+//        .spawn()
+//        .unwrap_or_else(|error| {
+//            panic!("NPM build error: {:?}", error);
+//        });
 
     env::set_current_dir(&(current_dir.as_path()))
         .expect("Error while cd to default dir");
