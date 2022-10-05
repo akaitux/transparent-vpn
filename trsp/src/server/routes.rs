@@ -13,8 +13,6 @@ pub struct Files;
 
 
 pub fn get_routes() -> Route {
-    let mut l = 1;
-    l = 2;
     Route::new()
         .at("/", EmbeddedFileEndpoint::<Files>::new("index.html"))
         .nest("/static", EmbeddedFilesEndpoint::<Files>::new())
