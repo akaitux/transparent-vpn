@@ -19,5 +19,3 @@ features = ["cookie", "csrf", "embed"]
 
 [build-dependencies]
 npm_rs = "0.2.1"
-fs_extra = "1.2.0"
-

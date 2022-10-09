@@ -3,11 +3,13 @@
     "version": "0.0.1",
     "private": true,
     "scripts": {
-        "build": "node_modules/.bin/vue-cli-service build"
+        "build": "node_modules/.bin/vite build"
     },
     "dependencies": {
-       "vue": ">=3.2.0",
-       "@vue/cli": ">=5.0.8",
-       "@vue/cli-service": ">=5.0.8"
+        "vite": ">=3.1.6",
+        "@vitejs/plugin-vue": ">=3.1.2",
+        "vue": ">=3.2.0",
+        "axios": ">=1.1.2",
+        "vuex": ">=4.0.2"
     }
 }

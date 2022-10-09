@@ -1,7 +1,5 @@
 use npm_rs::{NpmEnv, NodeEnv};
 use std::env;
-use std::fs;
-use fs_extra;
 // use std::process::Command;
 
 // https://github.com/bbachi/vuejs-nginx-docker
@@ -29,13 +27,13 @@ fn install_npm_packages() {
         panic!("{:?}", status);
     }
 
-    fs::copy("dist/index.html", "static/index.html").unwrap();
+    //fs::copy("dist/index.html", "static/index.html").unwrap();
 
-    let mut options = fs_extra::dir::CopyOptions::new();
-    options.overwrite = true;
-    fs_extra::dir::copy("dist/js", "static/", &options).unwrap();
+    //let mut options = fs_extra::dir::CopyOptions::new();
+    //options.overwrite = true;
+    //fs_extra::dir::copy("dist/js", "static/", &options).unwrap();
 
-    fs::remove_dir_all("dist/").unwrap();
+    //fs::remove_dir_all("dist/").unwrap();
 
 //    Command::new("npm")
 //        .args(["run", "build"])
