@@ -1,10 +1,20 @@
-pub mod server;
-pub mod settings;
+// pub mod web_server;
+pub mod config;
+// pub mod dns;
 
-use crate::server::server::get_server;
+use crate::config::CONFIG;
 
-
+/*
 #[tokio::main]
 async fn main() -> Result<(), std::io::Error> {
-    get_server().await
+    web_server::server::get_server().await?
+    println!("HEY!!")
+}
+*/
+
+fn main() {
+    let config = CONFIG.read().unwrap();
+    println!("Hey!");
+    println!("{:?}", config.debug);
+    //let dns_server = dns::server::get_dns_server();
 }

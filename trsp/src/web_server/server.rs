@@ -4,7 +4,7 @@ use poem::{
     listener::TcpListener,
     Server,
 };
-use crate::server::routes;
+use crate::web_server::routes;
 use crate::settings::SETTINGS;
 
 

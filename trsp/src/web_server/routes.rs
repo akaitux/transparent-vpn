@@ -4,7 +4,7 @@ use poem::{
     endpoint::EmbeddedFilesEndpoint,
 };
 
-use crate::server::views::auth;
+use crate::web_server::views::auth;
 use rust_embed::RustEmbed;
 
 
