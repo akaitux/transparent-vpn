@@ -3,6 +3,7 @@ mod options;
 mod dns;
 
 use clap::Parser;
+use std::error;
 
 /*
 #[tokio::main]
@@ -12,8 +13,13 @@ async fn main() -> Result<(), std::io::Error> {
 }
 */
 
-fn main() {
+
+#[tokio::main]
+async fn main() -> Result<(), Box<dyn error::Error>> {
     tracing_subscriber::fmt::init();
     let options = options::Options::parse();
-    let dns_server = dns::server::DnsServer::new(&options);
+    let mut dns_server = dns::server::DnsServer::new(&options);
+    dns_server.bind().await?;
+    dns_server.server.block_until_done().await?;
+    Ok(())
 }

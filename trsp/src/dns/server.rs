@@ -9,7 +9,7 @@ use trust_dns_server::server::{ServerFuture, RequestHandler};
 
 
 pub struct DnsServer<'a> {
-    server: ServerFuture<Handler>,
+    pub server: ServerFuture<Handler>,
     options: &'a Options,
 }
 
@@ -22,7 +22,7 @@ impl<'a> DnsServer<'a> {
         }
     }
 
-    pub async fn start(&mut self) -> Result<(), Box<dyn error::Error>> {
+    pub async fn bind(&mut self) -> Result<(), Box<dyn error::Error>> {
         let tcp_timeout = Duration::from_secs(
             self.options.dns_tcp_timeout.into()
         );
