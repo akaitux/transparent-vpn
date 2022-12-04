@@ -1,12 +1,11 @@
 use config;
 use serde::Deserialize;
 use lazy_static::lazy_static;
-use std::sync::RwLock;
+use std::{sync::RwLock, net::SocketAddr};
 use clap::Parser;
 
 
 const CONFIG_FILE_PATH: &str = "./config.toml";
-const DEFAULT_CONFIG_FILE_PATH: &str = "./default_config.toml";
 
 
 lazy_static! {
@@ -25,8 +24,8 @@ pub struct Web {
 
 #[derive(Debug, Deserialize, Clone)]
 pub struct Dns {
-    pub ip: String,
-    pub port: u16,
+    pub udp: Vec<SocketAddr>,
+    pub tcp: Vec<SocketAddr>,
 }
 
 
@@ -49,9 +48,8 @@ impl Config {
     pub fn new() -> Result<Self, config::ConfigError> {
         let args = Cli::parse();
         let s = config::Config::builder()
-            .add_source(config::File::with_name(DEFAULT_CONFIG_FILE_PATH))
             .add_source(config::File::with_name(CONFIG_FILE_PATH).required(false))
-            .add_source(config::Environment::with_prefix("trsp").separator("__"))
+            .add_source(config::Environment::with_prefix("trsp").separator("_"))
             .set_default("debug", false)?
             .set_default("web.ip", "0.0.0.0")?
             .set_default("web.port", 8000)?

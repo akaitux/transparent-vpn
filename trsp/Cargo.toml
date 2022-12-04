@@ -12,11 +12,14 @@ config = "0.13"
 serde = "1.0"
 lazy_static = "1.4.0"
 rust-embed = "6.4.1"
-trust-dns = "0.22.0"
+trust-dns-server = "0.22.0"
+async-trait = "0.1.59"
+tracing = "0.1"
+tracing-subscriber="0.3"
 
 [dependencies.clap]
 version = "4.0.29"
-features = ["derive"]
+features = ["derive", "env"]
 
 [dependencies.poem]
 version = "1.3"

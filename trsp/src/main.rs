@@ -1,8 +1,8 @@
 // pub mod web_server;
-pub mod config;
-// pub mod dns;
+mod options;
+mod dns;
 
-use crate::config::CONFIG;
+use clap::Parser;
 
 /*
 #[tokio::main]
@@ -13,8 +13,7 @@ async fn main() -> Result<(), std::io::Error> {
 */
 
 fn main() {
-    let config = CONFIG.read().unwrap();
-    println!("Hey!");
-    println!("{:?}", config.debug);
-    //let dns_server = dns::server::get_dns_server();
+    tracing_subscriber::fmt::init();
+    let options = options::Options::parse();
+    let dns_server = dns::server::DnsServer::new(&options);
 }
