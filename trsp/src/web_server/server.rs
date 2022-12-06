@@ -12,9 +12,11 @@
 use poem::{
    // EndpointExt,
    // session::{CookieConfig, CookieSession},
-    listener::{TcpListener, Listener, Acceptor, TcpAcceptor},
+    listener::TcpListener,
     Server,
 };
+use tokio::task::JoinHandle;
+use std::error;
 
 use std::{convert::Infallible, net::SocketAddr};
 use crate::options::Options;
@@ -22,40 +24,26 @@ use crate::web_server::routes;
 
 
 
-pub struct WebServer<'a, L, A> {
-    pub server: Server<L, A>,
+pub struct WebServer<'a> {
+    pub server: Server<TcpListener<SocketAddr>, Infallible>,
     options: &'a Options,
 }
 
-impl<'a, L, A> WebServer<'a, L, A>
+impl<'a> WebServer<'a>
 {
     pub fn new(options: &'a Options) -> Self {
         Self {
-            server: Server::new(TcpListener::bind(&options.web_addr)),
+            server: Server::new(TcpListener::bind(options.web_addr)),
             options: options,
         }
     }
 
-    // pub async fn start() -> Result<(), ()> {
-    //     Ok(())
+    pub async fn start(self)
+        -> Result<JoinHandle<Result<(), std::io::Error>>, Box<dyn error::Error>>
+    {
 
-    //     // let tcp_timeout = Duration::from_secs(
-    //     //     self.options.dns_tcp_timeout.into()
-    //     // );
-
-    //     // for udp in &self.options.dns_udp {
-    //     //     self.server.register_socket(UdpSocket::bind(udp).await?);
-    //     // }
-
-    //     // for tcp in &self.options.dns_tcp {
-    //     //     self.server.register_listener(
-    //     //         TcpListener::bind(&tcp).await?,
-    //     //         tcp_timeout,
-    //     //     );
-    //     // }
-
-    //     // // self.bind().await?;
-    //     // let dns_join = tokio::spawn(self.server.block_until_done());
-    //     // Ok(dns_join)
-    // }
+        let app = routes::get_routes();
+        let web_handler = tokio::spawn(self.server.run(app));
+        Ok(web_handler)
+    }
 }
