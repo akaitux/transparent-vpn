@@ -1,11 +1,13 @@
 use super::handler::Handler;
 use crate::options::Options;
-use tokio::net::{TcpListener, UdpSocket};
+use tokio::{
+    task::JoinHandle,
+    net::{TcpListener, UdpSocket},
+};
 use std::error;
-use std::io;
 use std::time::Duration;
-use std::cell::RefCell;
 use trust_dns_server::server::{ServerFuture, RequestHandler};
+use trust_dns_proto::error::ProtoError;
 
 
 pub struct DnsServer<'a> {
@@ -22,7 +24,8 @@ impl<'a> DnsServer<'a> {
         }
     }
 
-    pub async fn bind(&mut self) -> Result<(), Box<dyn error::Error>> {
+    pub async fn start(mut self) -> Result<JoinHandle<Result<(), ProtoError>>, Box<dyn error::Error>> {
+
         let tcp_timeout = Duration::from_secs(
             self.options.dns_tcp_timeout.into()
         );
@@ -37,7 +40,10 @@ impl<'a> DnsServer<'a> {
                 tcp_timeout,
             );
         }
-        Ok(())
+
+        // self.bind().await?;
+        let dns_join = tokio::spawn(self.server.block_until_done());
+        Ok(dns_join)
     }
 }
 
