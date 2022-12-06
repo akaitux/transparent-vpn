@@ -22,22 +22,20 @@ async fn main() -> Result<(), Box<dyn error::Error>> {
     let options = options::Options::parse();
 
     let dns_server = dns::server::DnsServer::new(&options);
-    let dns_handler = dns_server.start().await.expect("DNS server start failed");
-
+    let dns_handler = match dns_server.start().await {
+        Ok(dns_handler) => dns_handler,
+        Err(err) => {
+            println!("DNS server start failed: {:?}", err);
+            std::process::exit(1);
+        }
+    };
 
     let web_server = web_server::server::WebServer::new(&options);
     let web_handler = web_server.start().await.expect("Web server init failed");
 
-    // TODO: Откуда тут взялся еще один unwrap() ?
-    // if let Err(err) = web_handler.await.unwrap()  {
-    //     println!("Web error: {:?}", err);
-    // }
-
-    // if let Err(err) = dns_handler.await  {
-    //     println!("Dns error: {:?}", err);
-    // }
     tokio::select!  {
         res = web_handler => {
+            // TODO: Откуда тут взялся еще один unwrap() ?
             match res.unwrap() {
                 Ok(msg) => {
                     println!("Web server gracefully shutdown: {:?}", msg)
@@ -58,5 +56,6 @@ async fn main() -> Result<(), Box<dyn error::Error>> {
             }
         }
     }
+    // TODO: Обработка ошибок от tokio
     Ok(())
 }
