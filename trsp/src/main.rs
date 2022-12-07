@@ -5,15 +5,7 @@ mod web_server;
 
 use clap::Parser;
 use std::error;
-
-
-/*
-#[tokio::main]
-async fn main() -> Result<(), std::io::Error> {
-    web_server::server::get_server().await?
-    println!("HEY!!")
-}
-*/
+use std::process;
 
 
 #[tokio::main]
@@ -38,20 +30,22 @@ async fn main() -> Result<(), Box<dyn error::Error>> {
             // TODO: Откуда тут взялся еще один unwrap() ?
             match res.unwrap() {
                 Ok(msg) => {
-                    println!("Web server gracefully shutdown: {:?}", msg)
+                    println!("Web server gracefully shutdown: {:?}", msg);
                 }
                 Err(msg) => {
-                    println!("Web server error: {:?}", msg)
+                    println!("Web server error: {:?}", msg);
+                    std::process::exit(1);
                 }
             }
         },
         res = dns_handler => {
             match res {
                 Ok(msg) => {
-                    println!("Dns server gracefully shutdown: {:?}", msg)
+                    println!("Dns server gracefully shutdown: {:?}", msg);
                 }
                 Err(msg) => {
-                    println!("Dns server error: {:?}", msg)
+                    println!("Dns server error: {:?}", msg);
+                    std::process::exit(1);
                 }
             }
         }
