@@ -39,9 +39,7 @@ impl<'a> WebServer<'a>
     }
 
     pub async fn start(self)
-        -> Result<JoinHandle<Result<(), std::io::Error>>, Box<dyn error::Error>>
-    {
-
+        -> Result<JoinHandle<Result<(), std::io::Error>>, Box<dyn error::Error>> {
         let app = routes::get_routes();
         let web_handler = tokio::spawn(self.server.run(app));
         Ok(web_handler)

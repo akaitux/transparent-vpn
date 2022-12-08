@@ -1,4 +1,4 @@
-use super::handler::Handler;
+use crate::dns::handler::Handler;
 use crate::options::Options;
 use tokio::{
     task::JoinHandle,
@@ -24,7 +24,8 @@ impl<'a> DnsServer<'a> {
         }
     }
 
-    pub async fn start(mut self) -> Result<JoinHandle<Result<(), ProtoError>>, Box<dyn error::Error>> {
+    pub async fn start(mut self)
+        -> Result<JoinHandle<Result<(), ProtoError>>, Box<dyn error::Error>> {
 
         let tcp_timeout = Duration::from_secs(
             self.options.dns_tcp_timeout.into()
