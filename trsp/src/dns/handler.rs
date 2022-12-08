@@ -1,11 +1,13 @@
+use std::collections::HashMap;
+
 use crate::options::Options;
 use trust_dns_server::{
     proto::op::{Header, OpCode, MessageType, ResponseCode},
     server::{Request, RequestHandler, ResponseHandler, ResponseInfo},
-    store::forwarder::{authority::ForwardAuthority,config::ForwardConfig},
+    store::forwarder::{ForwardAuthority,ForwardConfig},
     client::rr::{LowerName},
+    resolver::config::{NameServerConfigGroup, ResolverOpts},
 };
-use trust_dns_resolver::config::{NameServerConfigGroup, ResolverOpts},
 use tracing::error;
 
 
@@ -23,15 +25,29 @@ pub enum Error {
 
 
 #[derive(Clone, Debug)]
-pub struct Handler<'a> {
-    options: &'a Options,
+pub struct Handler {
+    options: &'static Options,
     forward_config: ForwardConfig,
 }
 
-impl<'a> Handler<'a> {
-    pub fn new(options: &'a Options) -> Self {
+impl Handler {
+    pub fn new(options: &'static Options) -> Self {
         // https://github.com/bluejekyll/trust-dns/blob/main/crates/resolver/src/config.rs
-        let forward_config = ForwardConfig.google();
+        let name_servers = NameServerConfigGroup::new();
+        if let Some(resolvers) = options.dns_https_resolvers {
+            for socket in resolvers {
+
+                let _config = NameServerConfigGroup::from_ips_https(
+                    &[socket.ip()], socket.port(), true
+                );
+                name_servers.merge(_config);
+            }
+        }
+        let forward_options = None;
+        let forward_config = ForwardConfig{
+            name_servers,
+            options: forward_options
+        };
         Handler {options, forward_config}
     }
 
@@ -46,13 +62,13 @@ impl<'a> Handler<'a> {
         if request.message_type() != MessageType::Query {
             return Err(Error::InvalidMessageType(request.message_type()));
         }
-
+        return Err(Error::InvalidMessageType(request.message_type()));
     }
 }
 
 
 #[async_trait::async_trait]
-impl<'a> RequestHandler for Handler<'a> {
+impl RequestHandler for Handler {
     async fn handle_request<R: ResponseHandler>(
         &self,
         request: &Request,

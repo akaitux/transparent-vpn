@@ -6,17 +6,19 @@ use tokio::{
 };
 use std::error;
 use std::time::Duration;
-use trust_dns_server::server::{ServerFuture, RequestHandler};
-use trust_dns_proto::error::ProtoError;
+use trust_dns_server::{
+    server::{ServerFuture, RequestHandler},
+    proto::error::ProtoError,
+};
 
 
-pub struct DnsServer<'a> {
+pub struct DnsServer {
     pub server: ServerFuture<Handler>,
-    options: &'a Options,
+    options: &'static Options,
 }
 
-impl<'a> DnsServer<'a> {
-    pub fn new(options: &'a Options) -> Self {
+impl DnsServer {
+    pub fn new(options: &'static Options) -> Self {
         let handler = Handler::new(options);
         Self {
             server: ServerFuture::new(handler),
