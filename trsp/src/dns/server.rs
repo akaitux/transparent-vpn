@@ -22,7 +22,7 @@ impl DnsServer {
         let handler = Handler::new(options);
         Self {
             server: ServerFuture::new(handler),
-            options: options,
+            options,
         }
     }
 

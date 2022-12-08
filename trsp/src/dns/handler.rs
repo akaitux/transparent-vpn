@@ -33,12 +33,14 @@ pub struct Handler {
 impl Handler {
     pub fn new(options: &'static Options) -> Self {
         // https://github.com/bluejekyll/trust-dns/blob/main/crates/resolver/src/config.rs
-        let name_servers = NameServerConfigGroup::new();
-        if let Some(resolvers) = options.dns_https_resolvers {
-            for socket in resolvers {
+        let mut name_servers = NameServerConfigGroup::new();
+        if let Some(https_resolvers) = &options.dns_https_resolvers {
+            for socket in https_resolvers {
 
+                let ip = &[socket.ip()];
+                let port = socket.port();
                 let _config = NameServerConfigGroup::from_ips_https(
-                    &[socket.ip()], socket.port(), true
+                    ip, port, socket.ip().to_string(), true
                 );
                 name_servers.merge(_config);
             }

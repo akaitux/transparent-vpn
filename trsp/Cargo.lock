@@ -1925,6 +1925,7 @@ dependencies = [
  "tracing",
  "url",
  "webpki",
+ "webpki-roots",
 ]
 
 [[package]]
