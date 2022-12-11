@@ -13,7 +13,7 @@ pub struct Options {
     pub dns_udp: Vec<SocketAddr>,
     #[clap(long, value_delimiter = ';', env = "TRSP_DNS_TCP")]
     pub dns_tcp: Vec<SocketAddr>,
-    #[clap(long, value_delimiter = ';', default_value_t = 5, env = "TRSP_DNS_TCP_TIMEOUT")]
+    #[clap(long, value_delimiter = ';', default_value_t = 1, env = "TRSP_DNS_TCP_TIMEOUT")]
     pub dns_tcp_timeout: u8,
     #[clap(long, help="External plain resolvers", value_delimiter = ';', env = "TRSP_DNS_RESOLVERS")]
     pub dns_resolvers: Option<Vec<SocketAddr>>,

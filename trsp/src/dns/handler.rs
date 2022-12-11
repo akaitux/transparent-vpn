@@ -8,7 +8,7 @@ use trust_dns_server::{
     client::rr::{LowerName},
     resolver::config::{NameServerConfigGroup, ResolverOpts},
 };
-use tracing::error;
+use tracing::{debug, error};
 
 
 #[derive(thiserror::Error, Debug)]
@@ -35,7 +35,6 @@ impl Handler {
         let mut name_servers = NameServerConfigGroup::new();
         if let Some(https_resolvers) = &options.dns_https_resolvers {
             for socket in https_resolvers {
-
                 let ip = &[socket.ip()];
                 let port = socket.port();
                 let _config = NameServerConfigGroup::from_ips_https(
@@ -57,6 +56,10 @@ impl Handler {
         request: &Request,
         response: R,
     ) -> Result<ResponseInfo, Error> {
+        debug!(
+            "request: {}",
+            request.id(),
+        );
         if request.op_code() != OpCode::Query {
             return Err(Error::InvalidOpCode(request.op_code()))
         }
