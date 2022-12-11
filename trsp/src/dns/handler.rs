@@ -52,7 +52,7 @@ impl Handler {
         }
         let forward_options = None;
         let forward_authority = ForwardAuthority::try_from_config(
-            Name::new(),
+            Name::root(),
             ZoneType::Forward,
             &ForwardConfig{
                 name_servers,
@@ -61,7 +61,7 @@ impl Handler {
         ).expect("Error while creating forwarder for DNS handler");
         let mut catalog = Catalog::new();
         catalog.upsert(
-            LowerName::new(&Name::new()),
+            LowerName::new(&Name::root()),
             Box::new(Arc::new(forward_authority))
         );
         return catalog
