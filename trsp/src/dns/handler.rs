@@ -1,13 +1,14 @@
 use std::collections::HashMap;
 
 use crate::options::Options;
+use std::sync::Arc;
 use trust_dns_server::{
     proto::op::{Header, OpCode, MessageType, ResponseCode},
     server::{Request, RequestHandler, ResponseHandler, ResponseInfo},
     store::forwarder::{ForwardAuthority, ForwardConfig},
     client::rr::{LowerName, Name},
     resolver::config::{NameServerConfigGroup, ResolverOpts},
-    authority::ZoneType,
+    authority::{Catalog, ZoneType},
 };
 use tracing::{debug, error};
 
@@ -26,7 +27,7 @@ pub enum Error {
 
 
 pub struct Handler {
-    forwarder: ForwardAuthority,
+    forwarder: Catalog,
 }
 
 impl Handler {
@@ -37,7 +38,7 @@ impl Handler {
         }
     }
 
-    fn create_forwarder(options: &Options) -> ForwardAuthority {
+    fn create_forwarder(options: &Options) -> Catalog{
         let mut name_servers = NameServerConfigGroup::new();
         if let Some(https_resolvers) = &options.dns_https_resolvers {
             for socket in https_resolvers {
@@ -50,7 +51,7 @@ impl Handler {
             }
         }
         let forward_options = None;
-        let forwarder = ForwardAuthority::try_from_config(
+        let forward_authority = ForwardAuthority::try_from_config(
             Name::new(),
             ZoneType::Forward,
             &ForwardConfig{
@@ -58,7 +59,12 @@ impl Handler {
                 options: forward_options
             }
         ).expect("Error while creating forwarder for DNS handler");
-        return forwarder
+        let mut catalog = Catalog::new();
+        catalog.upsert(
+            LowerName::new(&Name::new()),
+            Box::new(Arc::new(forward_authority))
+        );
+        return catalog
     }
 
     async fn do_handle_request<R: ResponseHandler> (
@@ -76,7 +82,9 @@ impl Handler {
         if request.message_type() != MessageType::Query {
             return Err(Error::InvalidMessageType(request.message_type()));
         }
-        return Err(Error::InvalidMessageType(request.message_type()));
+        // TODO: second param is response_edns, google!
+        Ok(self.forwarder.handle_request(request, response).await)
+        // return Err(Error::InvalidMessageType(request.message_type()));
     }
 }
 
