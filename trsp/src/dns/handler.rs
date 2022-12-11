@@ -4,9 +4,10 @@ use crate::options::Options;
 use trust_dns_server::{
     proto::op::{Header, OpCode, MessageType, ResponseCode},
     server::{Request, RequestHandler, ResponseHandler, ResponseInfo},
-    store::forwarder::{ForwardAuthority,ForwardConfig},
-    client::rr::{LowerName},
+    store::forwarder::{ForwardAuthority, ForwardConfig},
+    client::rr::{LowerName, Name},
     resolver::config::{NameServerConfigGroup, ResolverOpts},
+    authority::ZoneType,
 };
 use tracing::{debug, error};
 
@@ -24,9 +25,8 @@ pub enum Error {
 }
 
 
-#[derive(Clone, Debug)]
 pub struct Handler {
-    forward_config: ForwardConfig,
+    forwarder: ForwardAuthority,
 }
 
 impl Handler {
@@ -44,11 +44,15 @@ impl Handler {
             }
         }
         let forward_options = None;
-        let forward_config = ForwardConfig{
-            name_servers,
-            options: forward_options
-        };
-        Handler {forward_config}
+        let forwarder = ForwardAuthority::try_from_config(
+            Name::new(),
+            ZoneType::Forward,
+            &ForwardConfig{
+                name_servers,
+                options: forward_options
+            }
+        ).expect("Error while creating forwarder for DNS handler");
+        Handler {forwarder}
     }
 
     async fn do_handle_request<R: ResponseHandler> (
