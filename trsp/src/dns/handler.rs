@@ -32,6 +32,12 @@ pub struct Handler {
 impl Handler {
     pub fn new(options: &Options) -> Self {
         // https://github.com/bluejekyll/trust-dns/blob/main/crates/resolver/src/config.rs
+        Handler {
+            forwarder: Self::create_forwarder(options),
+        }
+    }
+
+    fn create_forwarder(options: &Options) -> ForwardAuthority {
         let mut name_servers = NameServerConfigGroup::new();
         if let Some(https_resolvers) = &options.dns_https_resolvers {
             for socket in https_resolvers {
@@ -52,7 +58,7 @@ impl Handler {
                 options: forward_options
             }
         ).expect("Error while creating forwarder for DNS handler");
-        Handler {forwarder}
+        return forwarder
     }
 
     async fn do_handle_request<R: ResponseHandler> (
