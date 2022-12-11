@@ -72,10 +72,6 @@ impl Handler {
         request: &Request,
         response: R,
     ) -> Result<ResponseInfo, Error> {
-        debug!(
-            "request: {}",
-            request.id(),
-        );
         if request.op_code() != OpCode::Query {
             return Err(Error::InvalidOpCode(request.op_code()))
         }
