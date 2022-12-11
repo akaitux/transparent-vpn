@@ -82,7 +82,6 @@ impl Handler {
         if request.message_type() != MessageType::Query {
             return Err(Error::InvalidMessageType(request.message_type()));
         }
-        // TODO: second param is response_edns, google!
         Ok(self.forwarder.handle_request(request, response).await)
         // return Err(Error::InvalidMessageType(request.message_type()));
     }
