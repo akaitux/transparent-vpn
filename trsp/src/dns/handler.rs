@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::{collections::HashMap, net::SocketAddr};
 
 use crate::options::Options;
 use std::sync::Arc;
@@ -38,17 +38,34 @@ impl Handler {
         }
     }
 
+    fn add_resolvers(
+        resolvers: &Vec<SocketAddr>,
+        ns_group: &mut NameServerConfigGroup
+    )
+    // Add resolvers from Options to NS Config group
+    {
+        for socket in resolvers {
+            let ip = &[socket.ip()];
+            let port = socket.port();
+            let _config = NameServerConfigGroup::from_ips_https(
+                ip, port, socket.ip().to_string(), true
+            );
+            ns_group.merge(_config);
+        }
+    }
+
     fn create_forwarder(options: &Options) -> Catalog{
-        let mut name_servers = NameServerConfigGroup::new();
+        let mut name_servers: NameServerConfigGroup = NameServerConfigGroup::new();
+        let name_servers_ref = &mut name_servers;
         if let Some(https_resolvers) = &options.dns_https_resolvers {
-            for socket in https_resolvers {
-                let ip = &[socket.ip()];
-                let port = socket.port();
-                let _config = NameServerConfigGroup::from_ips_https(
-                    ip, port, socket.ip().to_string(), true
-                );
-                name_servers.merge(_config);
-            }
+            Handler::add_resolvers(&https_resolvers, name_servers_ref)
+        } else if let Some(plain_resolvers) = &options.dns_resolvers {
+            Handler::add_resolvers(&plain_resolvers, name_servers_ref)
+        } else if options.dns_https_resolvers_enabled {
+            name_servers.merge(NameServerConfigGroup::cloudflare_https());
+        } else {
+            name_servers.merge(NameServerConfigGroup::cloudflare());
+            name_servers.merge(NameServerConfigGroup::google());
         }
         let forward_options = None;
         let forward_authority = ForwardAuthority::try_from_config(

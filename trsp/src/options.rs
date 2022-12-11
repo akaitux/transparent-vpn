@@ -19,6 +19,8 @@ pub struct Options {
     pub dns_resolvers: Option<Vec<SocketAddr>>,
     #[clap(long, help="External https resolvers", value_delimiter = ';', env = "TRSP_DNS_HTTPS_RESOLVERS")]
     pub dns_https_resolvers: Option<Vec<SocketAddr>>,
+    #[clap(long, action, env = "TRSP_DNS_HTTPS_ENABLED")]
+    pub dns_https_resolvers_enabled: bool,
 
     // WEB
     #[clap(long, default_value = "0.0.0.0:80", env = "TRSP_WEB_ADDR")]
