@@ -89,12 +89,14 @@ impl Handler {
         request: &Request,
         response: R,
     ) -> Result<ResponseInfo, Error> {
+        // TODO: return error to client immediately
         if request.op_code() != OpCode::Query {
             return Err(Error::InvalidOpCode(request.op_code()))
         }
         if request.message_type() != MessageType::Query {
             return Err(Error::InvalidMessageType(request.message_type()));
         }
+        // TODO: Make vpn authority and create chain with Catalog<vpn_authority> and Catalog<ForwardAuthority>
         Ok(self.forwarder.handle_request(request, response).await)
         // return Err(Error::InvalidMessageType(request.message_type()));
     }
