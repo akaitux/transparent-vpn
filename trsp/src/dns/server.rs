@@ -12,14 +12,14 @@ use trust_dns_server::{
 };
 
 
-pub struct DnsServer {
+pub struct DnsServer<'a> {
     pub server: ServerFuture<Handler>,
-    options: &'static Options,
+    options: &'a Options,
 }
 
-impl DnsServer {
-    pub fn new(options: &'static Options) -> Self {
-        let handler = Handler::new(options);
+impl<'a> DnsServer<'a> {
+    pub fn new(options: &'a Options) -> Self {
+        let handler = Handler::new(&options);
         Self {
             server: ServerFuture::new(handler),
             options,

@@ -1,6 +1,7 @@
 use clap::Parser;
 use std::net::{IpAddr, SocketAddr};
 
+// TODO: Переделать как здесь https://github.com/sharkdp/bat/blob/master/src/bin/bat/app.rs
 
 #[derive(Parser, Debug, Clone)]
 pub struct Options {
@@ -23,4 +24,3 @@ pub struct Options {
     #[clap(long, default_value = "0.0.0.0:80", env = "TRSP_WEB_ADDR")]
     pub web_addr: SocketAddr,
 }
-

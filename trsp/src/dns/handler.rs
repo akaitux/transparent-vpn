@@ -26,12 +26,11 @@ pub enum Error {
 
 #[derive(Clone, Debug)]
 pub struct Handler {
-    options: &'static Options,
     forward_config: ForwardConfig,
 }
 
 impl Handler {
-    pub fn new(options: &'static Options) -> Self {
+    pub fn new(options: &Options) -> Self {
         // https://github.com/bluejekyll/trust-dns/blob/main/crates/resolver/src/config.rs
         let mut name_servers = NameServerConfigGroup::new();
         if let Some(https_resolvers) = &options.dns_https_resolvers {
@@ -50,7 +49,7 @@ impl Handler {
             name_servers,
             options: forward_options
         };
-        Handler {options, forward_config}
+        Handler {forward_config}
     }
 
     async fn do_handle_request<R: ResponseHandler> (
