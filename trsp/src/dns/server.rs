@@ -5,6 +5,9 @@ use tokio::{
     net::{TcpListener, UdpSocket},
 };
 use std::error;
+use std::net::IpAddr;
+use std::collections::HashMap;
+use std::sync::{Arc, Mutex};
 use std::time::Duration;
 use trust_dns_server::{
     server::{ServerFuture, RequestHandler},
@@ -12,8 +15,22 @@ use trust_dns_server::{
 };
 
 
+// pub struct DnsDB {
+//     db: Arc<Mutex<HashMap<String, IpAddr>>>,
+// }
+//
+// impl DnsDB {
+//     pub fn new() -> Self {
+//         Self {
+//             db: Arc::new(Mutex::new(HashMap::new())),
+//         }
+//     }
+// }
+
+
 pub struct DnsServer<'a> {
     pub server: ServerFuture<Handler>,
+    // pub db: DnsDB,
     options: &'a Options,
 }
 
@@ -22,6 +39,7 @@ impl<'a> DnsServer<'a> {
         let handler = Handler::new(&options);
         Self {
             server: ServerFuture::new(handler),
+            // db: DnsDB::new(),
             options,
         }
     }

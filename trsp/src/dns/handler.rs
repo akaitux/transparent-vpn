@@ -54,9 +54,10 @@ impl Handler {
         }
     }
 
-    fn create_forwarder(options: &Options) -> Catalog{
+    fn create_forwarder(options: &Options) -> Catalog {
         let mut name_servers: NameServerConfigGroup = NameServerConfigGroup::new();
         let name_servers_ref = &mut name_servers;
+
         if let Some(https_resolvers) = &options.dns_https_resolvers {
             Handler::add_resolvers(&https_resolvers, name_servers_ref)
         } else if let Some(plain_resolvers) = &options.dns_resolvers {
@@ -67,6 +68,7 @@ impl Handler {
             name_servers.merge(NameServerConfigGroup::cloudflare());
             name_servers.merge(NameServerConfigGroup::google());
         }
+
         let forward_options = None;
         let forward_authority = ForwardAuthority::try_from_config(
             Name::root(),
@@ -76,6 +78,7 @@ impl Handler {
                 options: forward_options
             }
         ).expect("Error while creating forwarder for DNS handler");
+
         let mut catalog = Catalog::new();
         catalog.upsert(
             LowerName::new(&Name::root()),
