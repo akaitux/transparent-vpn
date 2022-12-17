@@ -14,6 +14,8 @@ use trust_dns_server::{
     proto::error::ProtoError,
 };
 
+use super::blocked_domains;
+
 
 // pub struct DnsDB {
 //     db: Arc<Mutex<HashMap<String, IpAddr>>>,
@@ -46,6 +48,8 @@ impl<'a> DnsServer<'a> {
 
     pub async fn start(mut self)
         -> Result<JoinHandle<Result<(), ProtoError>>, Box<dyn error::Error>> {
+
+        let _blah = blocked_domains::get_blocked_domains(self.options).await?;
 
         let tcp_timeout = Duration::from_secs(
             self.options.dns_tcp_timeout.into()
