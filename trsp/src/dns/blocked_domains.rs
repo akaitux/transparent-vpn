@@ -3,21 +3,28 @@ use std::path::{Path, PathBuf};
 use std::fs;
 use std::error::Error;
 use std::env;
-use std::io;
 use std::str::FromStr;
+use std::time::Duration;
 use tracing::{debug, info, error};
 use tokio::{
-    io::{copy, AsyncWriteExt, AsyncReadExt},
-    fs::{ File, remove_file },
+    io::{self, copy, AsyncWriteExt, AsyncReadExt},
+    fs::{File, remove_file },
 };
+use tokio_stream::StreamExt;
+use trust_dns_server::proto::rr::RecordType;
 use crate::options::Options;
 
 use reqwest::{IntoUrl, Url};
 use thiserror::__private::PathAsDisplay;
-use trust_dns_server::client::rr::{RrKey, RecordSet};
+use trust_dns_server::client::rr::{RrKey, RecordSet, Name, LowerName};
+use encoding_rs::WINDOWS_1251;
+
+use tokio::time::sleep;
+use std::mem::size_of_val;
 
 
-type BlockedDomains = BTreeMap<RrKey, RecordSet>;
+// type BlockedDomains = BTreeMap<RrKey, RecordSet>;
+type BlockedDomains = BTreeMap<RrKey, String>;
 
 
 const DOMAINS_TMP_FILENAME: &str = "_trsp_domains.csv";
@@ -56,19 +63,83 @@ async fn download_and_parse(
     return Ok(domains_filepath)
 }
 
-// async fn download(url: &Url, write_to_filepath: &PathBuf) -> Result((), Box<dyn Error>>) {
-//     let tmp_filepath = tmp_dir.join(DOMAINS_TMP_FILENAME);
-//     info!("Download domains csv file to {}", tmp_filepath.as_path().as_display());
-//     let mut tmp_file = File::create(&tmp_filepath).await?;
-//
-//     let stream = reqwest::get(url.clone()).await
-//         .or(Err(format!("Failed to get request {}", url)))?
-//         .bytes_stream();
-//     while let Some(chunk_result) = stream.next().await {
-//         let chunk = chunk_result?;
-//         tmp_file.write_all(&chunk).await?;
-//
-// }
+
+fn parse_csv_domain(buf: &Vec<u8>) -> Result<String, Box<dyn Error>> {
+    let (enc_res, _, had_errors) = WINDOWS_1251.decode(&buf);
+    if had_errors {
+        return Err("Error while parsing csv domain from cp1251".into());
+    }
+    let domain = String::from(enc_res);
+    Ok(domain)
+}
+
+async fn download_chunked_csv(url: &Url, write_to_filepath: &PathBuf)
+-> Result<(), Box<dyn Error>>
+{
+    debug!("Download file to {}", write_to_filepath.as_path().as_display());
+    let mut file = File::create(&write_to_filepath).await?;
+
+    let mut stream = reqwest::get(url.clone()).await
+        .or(Err(format!("Failed to get request {}", url)))?
+        .bytes_stream();
+
+    let domain_column_num = 2;
+    let mut buf: Vec<u8> = Vec::with_capacity(100);
+    let mut current_column: u8 = 1;
+    let mut line_n: u64 = 0;
+    let mut domains: Vec<String> = Vec::with_capacity(1_500_000);
+    while let Some(chunk) = stream.next().await {
+        for byte in chunk? {
+            if byte == b';' {
+                current_column += 1;
+                continue;
+            } else if current_column == domain_column_num {
+                buf.push(byte);
+                continue
+            } else if byte == b'\n' {
+                // Reset csv column to first
+                current_column = 1;
+                line_n += 1;
+                let domain_buf = buf.clone();
+                buf.clear();
+                if let Ok(domain) = parse_csv_domain(&domain_buf) {
+                    // let name = LowerName::from(Name::from_ascii(domain)?);
+                    // domains.insert(
+                    //     RrKey::new(name, RecordType::A),
+                    //     String::from("none"),
+                    // );
+                    domains.push(domain);
+                    // file.write_all(format!("{}\n", domain).as_bytes()).await?;
+                    // file.write_all(&[b'\n']).await?;
+                    continue
+                } else {
+                    debug!("Error while parsing domains csv at line {}", line_n);
+                }
+            }
+        }
+    }
+    domains.dedup();
+    file.flush().await?;
+    debug!("Download csv file completed {}", write_to_filepath.as_path().as_display());
+    debug!("Size {}", size_of_val(&*domains));
+    sleep(Duration::from_secs(60)).await;
+    Ok(())
+}
+
+async fn download(url: &Url, write_to_filepath: &PathBuf)
+-> Result<(), Box<dyn Error>>
+{
+    debug!("Download file to {}", write_to_filepath.as_path().as_display());
+    let mut file = File::create(&write_to_filepath).await?;
+
+    let response = reqwest::get(url.clone()).await
+        .or(Err(format!("Failed to get request {}", url)))?;
+    let body = response.text().await
+        .or(Err(format!("Failed to download domains file content from {}", url)))?;
+    copy(&mut body.as_bytes(), &mut file).await
+        .or(Err("Failed to write domains file"))?;
+    Ok(())
+}
 
 
 async fn download_and_parse_domains(
@@ -80,16 +151,7 @@ async fn download_and_parse_domains(
 // CSV file
 {
     let tmp_filepath = tmp_dir.join(DOMAINS_TMP_FILENAME);
-    info!("Download domains csv file to {}", tmp_filepath.as_path().as_display());
-    let mut tmp_file = File::create(&tmp_filepath).await?;
-
-    let response = reqwest::get(url.clone()).await
-        .or(Err(format!("Failed to get request {}", url)))?;
-    let body = response.text().await
-        .or(Err(format!("Failed to download domains file content from {}", url)))?;
-    copy(&mut body.as_bytes(), &mut tmp_file).await
-        .or(Err("Failed to write domains file"))?;
-    // remove_file(tmp_filepath)?;
+    download_chunked_csv(url, &tmp_filepath).await?;
     Ok(())
 }
 

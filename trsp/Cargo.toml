@@ -8,10 +8,12 @@ build = "build.rs"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 [dependencies]
 tokio = { version = "1.21", features = ["rt-multi-thread", "macros"]}
+tokio-stream = "0.1"
 config = "0.13"
 serde = "1.0"
 lazy_static = "1.4"
 rust-embed = "6.4"
+encoding_rs = "0.8"
 async-trait = "0.1"
 tracing = "0.1"
 tracing-subscriber="0.3"
