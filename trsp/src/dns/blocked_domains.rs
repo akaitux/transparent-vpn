@@ -19,8 +19,16 @@ use thiserror::__private::PathAsDisplay;
 use trust_dns_server::client::rr::{RrKey, RecordSet, Name, LowerName};
 use encoding_rs::WINDOWS_1251;
 
+use lazy_static::lazy_static;
+use regex::Regex;
+
 use tokio::time::sleep;
 use std::mem::size_of_val;
+
+
+lazy_static! {
+    static ref DOMAIN_RE: Regex = Regex::new(r"^[а-яА-Яa-zA-Z0-9\-\_\.\*]*+$").unwrap();
+}
 
 
 // type BlockedDomains = BTreeMap<RrKey, RecordSet>;
@@ -64,12 +72,20 @@ async fn download_and_parse(
 }
 
 
-fn parse_csv_domain(buf: &Vec<u8>) -> Result<String, Box<dyn Error>> {
+fn _parse_csv_domain(buf: &Vec<u8>) -> Result<String, Box<dyn Error>> {
     let (enc_res, _, had_errors) = WINDOWS_1251.decode(&buf);
     if had_errors {
         return Err("Error while parsing csv domain from cp1251".into());
     }
     let domain = String::from(enc_res);
+    if domain.contains("\\") {
+        return Ok("".into())
+    }
+    let domain = domain.replace("*.", "");
+    let domain: String = match domain.strip_suffix(".") {
+        Some(s) => s.into(),
+        None => domain,
+    };
     Ok(domain)
 }
 
@@ -84,7 +100,9 @@ async fn download_chunked_csv(url: &Url, write_to_filepath: &PathBuf)
         .bytes_stream();
 
     let domain_column_num = 2;
+    // Buffer for domain str
     let mut buf: Vec<u8> = Vec::with_capacity(100);
+    // Column in csv line
     let mut current_column: u8 = 1;
     let mut line_n: u64 = 0;
     let mut domains: Vec<String> = Vec::with_capacity(1_500_000);
@@ -102,13 +120,15 @@ async fn download_chunked_csv(url: &Url, write_to_filepath: &PathBuf)
                 line_n += 1;
                 let domain_buf = buf.clone();
                 buf.clear();
-                if let Ok(domain) = parse_csv_domain(&domain_buf) {
+                if let Ok(domain) = _parse_csv_domain(&domain_buf) {
                     // let name = LowerName::from(Name::from_ascii(domain)?);
                     // domains.insert(
                     //     RrKey::new(name, RecordType::A),
                     //     String::from("none"),
                     // );
-                    domains.push(domain);
+                    if domain.len() != 0 {
+                        domains.push(domain);
+                    }
                     // file.write_all(format!("{}\n", domain).as_bytes()).await?;
                     // file.write_all(&[b'\n']).await?;
                     continue
@@ -119,10 +139,9 @@ async fn download_chunked_csv(url: &Url, write_to_filepath: &PathBuf)
         }
     }
     domains.dedup();
+    file.write_all(domains.join("\n").as_bytes()).await?;
     file.flush().await?;
     debug!("Download csv file completed {}", write_to_filepath.as_path().as_display());
-    debug!("Size {}", size_of_val(&*domains));
-    sleep(Duration::from_secs(60)).await;
     Ok(())
 }
 
@@ -150,8 +169,15 @@ async fn download_and_parse_domains(
 -> Result<(), Box<dyn Error>>
 // CSV file
 {
+    use std::time::Instant;
+    let start = Instant::now();
+
     let tmp_filepath = tmp_dir.join(DOMAINS_TMP_FILENAME);
     download_chunked_csv(url, &tmp_filepath).await?;
+
+    let duration = start.elapsed();
+    debug!("Domains download time: {:?}", duration);
+    sleep(Duration::from_secs(60)).await;
     Ok(())
 }
 
