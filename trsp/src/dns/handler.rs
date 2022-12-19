@@ -1,4 +1,4 @@
-use std::{collections::HashMap, net::SocketAddr};
+use std::net::SocketAddr;
 
 use crate::options::Options;
 use std::sync::Arc;
@@ -7,10 +7,10 @@ use trust_dns_server::{
     server::{Request, RequestHandler, ResponseHandler, ResponseInfo},
     store::forwarder::{ForwardAuthority, ForwardConfig},
     client::rr::{LowerName, Name},
-    resolver::config::{NameServerConfigGroup, ResolverOpts},
+    resolver::config::NameServerConfigGroup,
     authority::{Catalog, ZoneType},
 };
-use tracing::{debug, error};
+use tracing::error;
 
 
 #[derive(thiserror::Error, Debug)]

@@ -3,11 +3,11 @@ use std::path::PathBuf;
 use std::error::Error;
 use std::env;
 use std::str::FromStr;
-use std::time::{Duration, Instant};
+use std::time::Instant;
 use tracing::{debug, info, error};
 use tokio::{
-    io::{self, copy, AsyncWriteExt, AsyncReadExt},
-    fs::{File, remove_file },
+    io::{copy, AsyncWriteExt},
+    fs::{File, remove_file},
 };
 use tokio_stream::StreamExt;
 use trust_dns_server::proto::rr::RecordType;
@@ -98,9 +98,13 @@ async fn download_chunked_csv(url: &Url, write_to_filepath: &PathBuf)
     info!("Download domains csv file to {}", write_to_filepath.as_path().as_display());
     let mut file = File::create(&write_to_filepath).await?;
 
-    let mut stream = reqwest::get(url.clone()).await
-        .or(Err(format!("Failed to get request {}", url)))?
-        .bytes_stream();
+    let response = reqwest::get(url.clone()).await?;
+    match response.error_for_status_ref() {
+        Ok(_) => debug!("Reqwest get OK: {} {}", url, response.status()),
+        Err(err) => {
+            return Err(err.into())
+        }
+    };
 
     let mut errors_count: u64 = 0;
     // The num of column that contains the domain
@@ -111,6 +115,7 @@ async fn download_chunked_csv(url: &Url, write_to_filepath: &PathBuf)
     let mut current_column: u8 = 1;
     let mut line_n: u64 = 0;
     let mut domains: Vec<String> = Vec::with_capacity(1_500_000);
+    let mut stream = response.bytes_stream();
     while let Some(chunk) = stream.next().await {
         for byte in chunk? {
             if byte == b';' {

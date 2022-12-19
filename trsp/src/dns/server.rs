@@ -5,12 +5,9 @@ use tokio::{
     net::{TcpListener, UdpSocket},
 };
 use std::error;
-use std::net::IpAddr;
-use std::collections::HashMap;
-use std::sync::{Arc, Mutex};
 use std::time::Duration;
 use trust_dns_server::{
-    server::{ServerFuture, RequestHandler},
+    server::ServerFuture,
     proto::error::ProtoError,
 };
 

@@ -5,7 +5,6 @@ mod web_server;
 
 use clap::Parser;
 use std::error;
-use std::process;
 
 use tracing_subscriber::{filter, prelude::*};
 

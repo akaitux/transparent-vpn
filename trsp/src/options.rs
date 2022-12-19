@@ -7,6 +7,8 @@ use std::net::SocketAddr;
 pub struct Options {
     #[clap(short = 'd', long = "debug", action, env = "TRSP_DEBUG")]
     pub debug: bool,
+    #[clap(short = 'w', long = "workdir", default_value="/opt/trsp", env = "TRSP_DEBUG")]
+    pub workdir: String,
 
 
     // DNS
