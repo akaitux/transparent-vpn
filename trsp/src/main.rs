@@ -5,8 +5,15 @@ mod web_server;
 
 use clap::Parser;
 use std::error;
+use std::env;
+use std::fs;
+use std::path::PathBuf;
+use std::str::FromStr;
+
+use std::error::Error;
 
 use tracing_subscriber::{filter, prelude::*};
+use tracing::info;
 
 
 fn setup_logger(opts: &options::Options) {
@@ -26,13 +33,56 @@ fn setup_logger(opts: &options::Options) {
 }
 
 
+fn setup_workdir(opts: &options::Options) -> Result<PathBuf, Box<dyn Error>> {
+    // If "workdir" variable is set - use it
+    // If run with USER and HOME env variables - {HOME}/.local/share/trsp
+    // If USER - /home/{USER}/.local/share/trsp
+    // If no USER - /opt/trsp
+    let opts_workdir: String = opts.workdir.clone().into();
+    let mut workdir_path = PathBuf::new();
+    if opts_workdir.is_empty() {
+        match env::var("USER") {
+            Ok(user) => {
+                match env::var("HOME") {
+                    Ok(home) => {
+                        workdir_path = PathBuf::from(home)
+                            .join(".local/share/trsp");
+                    },
+                    Err(_) => {
+                        workdir_path = PathBuf::from(
+                            format!("/home/{}/.local/share/trsp", user)
+                        );
+                    }
+
+                }
+            },
+            Err(_) => {
+                workdir_path = PathBuf::from("/opt/trsp");
+            }
+        };
+    }
+    if workdir_path.display().to_string().is_empty() {
+        return Err("Internal error, workdir var is empty".into())
+    }
+    fs::create_dir_all(&workdir_path)?;
+    fs::create_dir_all(&workdir_path.join("dns"))?;
+    info!("Workdir is: {}", workdir_path.display());
+    return Ok(workdir_path)
+}
+
+
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn error::Error>> {
     let options = options::Options::parse();
 
     setup_logger(&options);
+    let workdir = match setup_workdir(&options) {
+        Ok(workdir) => workdir,
+        Err(err) => panic!("Error while setup workdir: {}", err),
+    };
 
-    let dns_server = dns::server::DnsServer::new(&options);
+    let dns_workdir = workdir.join("dns");
+    let dns_server = dns::server::DnsServer::new(&options, &dns_workdir);
     let dns_handler = match dns_server.start().await {
         Ok(dns_handler) => dns_handler,
         Err(err) => {

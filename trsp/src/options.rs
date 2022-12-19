@@ -7,7 +7,7 @@ use std::net::SocketAddr;
 pub struct Options {
     #[clap(short = 'd', long = "debug", action, env = "TRSP_DEBUG")]
     pub debug: bool,
-    #[clap(short = 'w', long = "workdir", default_value="/opt/trsp", env = "TRSP_DEBUG")]
+    #[clap(short = 'w', long = "workdir", default_value="", env = "TRSP_WORKDIR")]
     pub workdir: String,
 
 
@@ -57,16 +57,19 @@ pub struct Options {
     #[clap(
         long,
         default_value = "https://raw.githubusercontent.com/zapret-info/z-i/master/dump.csv",
-        env = "TRSP_DNS_BLOCKED_DOMAINS_CSV_LINK")
+        env = "TRSP_DNS_BLOCKED_DOMAINS_CSV")
     ]
-    pub dns_blocked_domains_csv_link: String,
+    pub dns_blocked_domains_csv: String,
 
     #[clap(
         long,
         default_value = "https://raw.githubusercontent.com/zapret-info/z-i/master/nxdomain.txt",
-        env = "TRSP_DNS_BLOCKED_NXDOMAINS_TXT_LINK")
+        env = "TRSP_DNS_BLOCKED_NXDOMAINS_TXT")
     ]
-    pub dns_blocked_nxdomains_txt_link: String,
+    pub dns_blocked_nxdomains_txt: String,
+
+    #[clap(long, action, default_value_t=false, env="TRSP_DNS_USE_NXDOMAINS")]
+    pub dns_use_nxdomains: bool,
 
 
     // WEB
