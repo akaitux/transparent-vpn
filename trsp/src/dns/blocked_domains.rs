@@ -1,10 +1,9 @@
 use std::collections::BTreeMap;
-use std::path::{Path, PathBuf};
-use std::fs;
+use std::path::PathBuf;
 use std::error::Error;
 use std::env;
 use std::str::FromStr;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 use tracing::{debug, info, error};
 use tokio::{
     io::{self, copy, AsyncWriteExt, AsyncReadExt},
@@ -14,7 +13,7 @@ use tokio_stream::StreamExt;
 use trust_dns_server::proto::rr::RecordType;
 use crate::options::Options;
 
-use reqwest::{IntoUrl, Url};
+use reqwest::Url;
 use thiserror::__private::PathAsDisplay;
 use trust_dns_server::client::rr::{RrKey, RecordSet, Name, LowerName};
 use encoding_rs::WINDOWS_1251;
@@ -22,12 +21,9 @@ use encoding_rs::WINDOWS_1251;
 use lazy_static::lazy_static;
 use regex::Regex;
 
-use tokio::time::sleep;
-use std::mem::size_of_val;
-
 
 lazy_static! {
-    static ref DOMAIN_RE: Regex = Regex::new(r"^[а-яА-Яa-zA-Z0-9\-\_\.\*]*+$").unwrap();
+    static ref DOMAIN_RE: Regex = Regex::new(r"^[а-яА-Яa-zA-Z0-9\-_\.\*]*+$").unwrap();
 }
 
 
@@ -72,33 +68,42 @@ async fn download_and_parse(
 }
 
 
-fn _parse_csv_domain(buf: &Vec<u8>) -> Result<String, Box<dyn Error>> {
+fn _prepare_csv_domain(buf: &Vec<u8>) -> Result<String, Box<dyn Error>> {
     let (enc_res, _, had_errors) = WINDOWS_1251.decode(&buf);
     if had_errors {
         return Err("Error while parsing csv domain from cp1251".into());
     }
     let domain = String::from(enc_res);
+    Ok(_prepare_domain_name(&domain))
+}
+
+fn _prepare_domain_name(domain: &String) -> String {
     if domain.contains("\\") {
-        return Ok("".into())
+        return "".into()
+    }
+    if ! DOMAIN_RE.is_match(domain.as_ref()) {
+        return "".into()
     }
     let domain = domain.replace("*.", "");
     let domain: String = match domain.strip_suffix(".") {
         Some(s) => s.into(),
         None => domain,
     };
-    Ok(domain)
+    domain
 }
 
 async fn download_chunked_csv(url: &Url, write_to_filepath: &PathBuf)
 -> Result<(), Box<dyn Error>>
 {
-    debug!("Download file to {}", write_to_filepath.as_path().as_display());
+    info!("Download domains csv file to {}", write_to_filepath.as_path().as_display());
     let mut file = File::create(&write_to_filepath).await?;
 
     let mut stream = reqwest::get(url.clone()).await
         .or(Err(format!("Failed to get request {}", url)))?
         .bytes_stream();
 
+    let mut errors_count: u64 = 0;
+    // The num of column that contains the domain
     let domain_column_num = 2;
     // Buffer for domain str
     let mut buf: Vec<u8> = Vec::with_capacity(100);
@@ -120,7 +125,7 @@ async fn download_chunked_csv(url: &Url, write_to_filepath: &PathBuf)
                 line_n += 1;
                 let domain_buf = buf.clone();
                 buf.clear();
-                if let Ok(domain) = _parse_csv_domain(&domain_buf) {
+                if let Ok(domain) = _prepare_csv_domain(&domain_buf) {
                     // let name = LowerName::from(Name::from_ascii(domain)?);
                     // domains.insert(
                     //     RrKey::new(name, RecordType::A),
@@ -129,11 +134,10 @@ async fn download_chunked_csv(url: &Url, write_to_filepath: &PathBuf)
                     if domain.len() != 0 {
                         domains.push(domain);
                     }
-                    // file.write_all(format!("{}\n", domain).as_bytes()).await?;
-                    // file.write_all(&[b'\n']).await?;
                     continue
                 } else {
                     debug!("Error while parsing domains csv at line {}", line_n);
+                    errors_count += 1;
                 }
             }
         }
@@ -141,7 +145,11 @@ async fn download_chunked_csv(url: &Url, write_to_filepath: &PathBuf)
     domains.dedup();
     file.write_all(domains.join("\n").as_bytes()).await?;
     file.flush().await?;
-    debug!("Download csv file completed {}", write_to_filepath.as_path().as_display());
+    info!(
+        "Download domains csv file completed {}, errors: {}",
+        write_to_filepath.as_path().as_display(),
+        errors_count,
+    );
     Ok(())
 }
 
@@ -169,15 +177,13 @@ async fn download_and_parse_domains(
 -> Result<(), Box<dyn Error>>
 // CSV file
 {
-    use std::time::Instant;
     let start = Instant::now();
 
     let tmp_filepath = tmp_dir.join(DOMAINS_TMP_FILENAME);
     download_chunked_csv(url, &tmp_filepath).await?;
 
     let duration = start.elapsed();
-    debug!("Domains download time: {:?}", duration);
-    sleep(Duration::from_secs(60)).await;
+    info!("Domains csv download time: {:?}", duration);
     Ok(())
 }
 
