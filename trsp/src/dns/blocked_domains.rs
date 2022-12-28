@@ -1,4 +1,4 @@
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, HashSet};
 use std::path::PathBuf;
 use std::error::Error;
 use std::env;
@@ -6,16 +6,19 @@ use std::str::FromStr;
 use std::time::Instant;
 use tracing::{debug, info, error};
 use tokio::{
-    io::{copy, AsyncWriteExt},
+    io::{copy, AsyncWriteExt, AsyncBufReadExt, BufReader},
     fs::{self, File, remove_file},
 };
 use tokio_stream::StreamExt;
-use trust_dns_server::proto::rr::RecordType;
 use crate::options::Options;
 
 use reqwest::Url;
 use thiserror::__private::PathAsDisplay;
-use trust_dns_server::client::rr::{RrKey, RecordSet, Name, LowerName};
+use trust_dns_server::{
+    proto::rr::RecordType,
+    client::rr::{RrKey, RecordSet, Name, LowerName},
+    store::in_memory::InMemoryAuthority,
+};
 use encoding_rs::WINDOWS_1251;
 
 use lazy_static::lazy_static;
@@ -29,51 +32,142 @@ lazy_static! {
 
 const DOMAINS_TMP_FILENAME: &str = "_trsp_domains.csv";
 const NXDOMAINS_TMP_FILENAME: &str = "_trsp_nxdomains.txt";
+const DEFAULT_DOMAINS_HASHSET_CAP: usize = 2_000_000;
 
 
-struct BlockedDomains<'a> {
-    domains: Vec<String>,
-    cache_file_path: &'a PathBuf,
+pub struct BlockedDomains {
+    domains: HashSet<String>,
+    workdir: PathBuf,
 }
 
-impl<'a> BlockedDomains<'a> {
-    fn new(cache_file_path: &'a PathBuf) -> Self {
+impl BlockedDomains {
+    fn new(workdir: &PathBuf) -> Self {
         Self {
-            domains: Vec::with_capacity(1_500_000),
-            cache_file_path,
+            domains: HashSet::with_capacity(DEFAULT_DOMAINS_HASHSET_CAP),
+            workdir: workdir.clone(),
         }
     }
 
-    async fn write_to_file(&mut self) -> Result<(), Box<dyn Error>> {
-        let mut file = File::create(self.cache_file_path).await?;
-        self.domains.dedup();
-        file.write_all(self.domains.join("\n").as_bytes()).await?;
-        file.flush().await?;
+    async fn write_to_file(
+        &self,
+        domains: &HashSet<String>,
+        write_to: &PathBuf
+    ) -> Result<(), Box<dyn Error>>
+    {
+        Ok(())
+        // let mut file = File::create(write_to).await?;
+        // file.write_all(domains.iter().join("\n").as_bytes()).await?;
+        // file.flush().await?;
+        // Ok(())
+    }
+
+    async fn read_from_file(
+        &mut self,
+        read_from: &PathBuf,
+    ) -> Result<(), Box<dyn Error>>
+    {
+        Ok(())
+        // let file = File::open(read_from).await?;
+        // let reader = BufReader::new(file);
+        // let mut lines = reader.lines();
+
+        // while let Some(line) = lines.next_line().await? {
+        //     self.domains.insert(line);
+        // }
+        // Ok(())
+    }
+
+    fn insert(&mut self, domain: &String) {
+        self.domains.insert(domain.clone());
+    }
+
+    async fn download_domains(&mut self, url: &Url)
+    -> Result<(), Box<dyn Error>>
+    {
+        let mut domains: HashSet<String> = HashSet::with_capacity(
+            DEFAULT_DOMAINS_HASHSET_CAP
+        );
+        let write_to_filepath = self.workdir.join(DOMAINS_TMP_FILENAME);
+        info!(
+            "Downloaded domains cache: {}",
+            write_to_filepath.as_path().as_display()
+        );
+
+        let response = reqwest::get(url.clone()).await?;
+        match response.error_for_status_ref() {
+            Ok(_) => debug!("Reqwest get OK: {} {}", url, response.status()),
+            Err(err) => {
+                return Err(err.into())
+            }
+        };
+
+        let mut errors_count: u64 = 0;
+        // The num of column that contains the domain
+        let domain_column_num = 2;
+        // Buffer for domain str
+        let mut buf: Vec<u8> = Vec::with_capacity(100);
+        // Column in csv line
+        let mut current_column: u8 = 1;
+        let mut line_n: u64 = 0;
+        let mut stream = response.bytes_stream();
+        while let Some(chunk) = stream.next().await {
+            for byte in chunk? {
+                if byte == b';' {
+                    current_column += 1;
+                    continue;
+                } else if current_column == domain_column_num {
+                    buf.push(byte);
+                    continue
+                } else if byte == b'\n' {
+                    // Reset csv column to first
+                    current_column = 1;
+                    line_n += 1;
+                    let domain_buf = buf.clone();
+                    buf.clear();
+                    if let Ok(domain) = _prepare_csv_domain(&domain_buf) {
+                        if domain.len() != 0 {
+                            domains.insert(domain);
+                        }
+                        continue
+                    } else {
+                        debug!("Error while parsing domains csv at line {}", line_n);
+                        errors_count += 1;
+                    }
+                }
+            }
+        }
+        self.write_to_file(&domains, &write_to_filepath).await?;
+        self.domains.extend(domains);
+        info!(
+            "Download domains csv file completed {}, errors: {}",
+            write_to_filepath.as_path().as_display(),
+            errors_count,
+        );
         Ok(())
     }
 
-    async fn read_from_file(&mut self) -> Result<(), Box<dyn Error>> {
-        todo!()
-        //let file = File::open(self.cache_file_path).await?;
-        //let mut reader = BufReader::new(file);
-        //Ok(())
+    async fn download_nxdomains(
+        &mut self,
+        url: &Url,
+    )
+    -> Result<BlockedDomains, Box<dyn Error>>
+    {
+        Err("Blah".into())
     }
 
-    fn push(&mut self, domain: &String) {
-        self.domains.push(domain.clone());
-    }
+
 
 }
 
 
-impl<'a> IntoIterator for BlockedDomains<'a> {
-    type Item = String;
-    type IntoIter = <Vec<String> as IntoIterator>::IntoIter;
-
-    fn into_iter(self) -> Self::IntoIter {
-      self.domains.into_iter()
-    }
-}
+// impl IntoIterator for BlockedDomains {
+//     type Item = String;
+//     type IntoIter = <Vec<String> as IntoIterator>::IntoIter;
+//
+//     fn into_iter(self) -> Self::IntoIter {
+//       self.domains.into_iter()
+//     }
+// }
 
 //Posibly need deref - https://stackoverflow.com/questions/70547514/how-to-implement-iterator-trait-over-wrapped-vector-in-rust
 
@@ -81,31 +175,49 @@ pub async fn get_blocked_domains(
     domains_csv_url: &Url,
     nxdomais_txt_url: &Option<Url>,
     workdir: &PathBuf,
-) -> Result<(), Box<dyn Error>> {
+) -> Result<BlockedDomains, Box<dyn Error>>
+{
     let tmp_dir = env::temp_dir();
     debug!("Temp dir for downloads is {}", tmp_dir.as_path().as_display());
-    download_and_parse(domains_csv_url, nxdomais_txt_url, workdir).await?;
-    Ok(())
+    download_and_parse(domains_csv_url, nxdomais_txt_url, workdir).await
 }
 
 
 async fn download_and_parse(
     domains_url: &Url,
     nxdomains_url: &Option<Url>,
-    tmp_dir: &PathBuf,
-) -> Result<PathBuf, Box<dyn Error>>
+    workdir: &PathBuf,
+) -> Result<BlockedDomains, Box<dyn Error>>
 {
-    let domains_filepath = tmp_dir.join("trsp_domains_downl.txt");
-    let mut domains_file = File::create(
-        &domains_filepath
-    ).await.or(
-        Err(format!("Failed to create file '{}'", domains_filepath.as_path().as_display()))
-    )?;
-    download_and_parse_domains(&domains_url, &mut domains_file, &tmp_dir).await?;
+    // let domains_filepath = workdir.join("trsp_domains_downl.txt");
+    // let mut domains_file = File::create(
+    //     &domains_filepath
+    // ).await.or(
+    //     Err(format!("Failed to create file '{}'", domains_filepath.as_path().as_display()))
+    // )?;
+    let mut domains = BlockedDomains::new(workdir);
+
+    let start = Instant::now();
+    domains.download_domains(&domains_url).await?;
+    let duration = start.elapsed();
+    info!("Domains load time: {:?}", duration);
+
     if let Some(url) = nxdomains_url {
-        download_and_parse_nxdomains(url, &domains_file).await?;
+        let start = Instant::now();
+        domains.download_nxdomains(url).await?;
+        let duration = start.elapsed();
+        info!("NXDomains load time: {:?}", duration);
     }
-    return Ok(domains_filepath)
+    // let mut domains = download_and_parse_domains(
+    //     &domains_url,
+    //     &mut domains_file,
+    //     &tmp_dir
+    // ).await?;
+    // if let Some(url) = nxdomains_url {
+    //     let nx_domains = download_and_parse_nxdomains(url, &domains_file).await?;
+    //     domains.merge(&nx_domains);
+    // }
+    return Ok(domains)
 }
 
 
@@ -133,113 +245,19 @@ fn _prepare_domain_name(domain: &String) -> String {
     domain
 }
 
-async fn download_chunked_csv<'a>(url: &Url, write_to_filepath: &'a PathBuf)
--> Result<BlockedDomains<'a>, Box<dyn Error>>
-{
-    info!("Download domains csv file to {}", write_to_filepath.as_path().as_display());
-
-    let response = reqwest::get(url.clone()).await?;
-    match response.error_for_status_ref() {
-        Ok(_) => debug!("Reqwest get OK: {} {}", url, response.status()),
-        Err(err) => {
-            return Err(err.into())
-        }
-    };
-
-    let mut errors_count: u64 = 0;
-    // The num of column that contains the domain
-    let domain_column_num = 2;
-    // Buffer for domain str
-    let mut buf: Vec<u8> = Vec::with_capacity(100);
-    // Column in csv line
-    let mut current_column: u8 = 1;
-    let mut line_n: u64 = 0;
-    // let mut domains: Vec<String> = Vec::with_capacity(1_500_000);
-    let mut domains = BlockedDomains::new(write_to_filepath);
-    let mut stream = response.bytes_stream();
-    while let Some(chunk) = stream.next().await {
-        for byte in chunk? {
-            if byte == b';' {
-                current_column += 1;
-                continue;
-            } else if current_column == domain_column_num {
-                buf.push(byte);
-                continue
-            } else if byte == b'\n' {
-                // Reset csv column to first
-                current_column = 1;
-                line_n += 1;
-                let domain_buf = buf.clone();
-                buf.clear();
-                if let Ok(domain) = _prepare_csv_domain(&domain_buf) {
-                    if domain.len() != 0 {
-                        domains.push(&domain);
-                    }
-                    continue
-                } else {
-                    debug!("Error while parsing domains csv at line {}", line_n);
-                    errors_count += 1;
-                }
-            }
-        }
-    }
-    domains.write_to_file().await?;
-    info!(
-        "Download domains csv file completed {}, errors: {}",
-        write_to_filepath.as_path().as_display(),
-        errors_count,
-    );
-    Ok(domains)
-}
+// async fn download(url: &Url, write_to_filepath: &PathBuf)
+// -> Result<(), Box<dyn Error>>
+// {
+//     debug!("Download file to {}", write_to_filepath.as_path().as_display());
+//     let mut file = File::create(&write_to_filepath).await?;
+//
+//     let response = reqwest::get(url.clone()).await
+//         .or(Err(format!("Failed to get request {}", url)))?;
+//     let body = response.text().await
+//         .or(Err(format!("Failed to download domains file content from {}", url)))?;
+//     copy(&mut body.as_bytes(), &mut file).await
+//         .or(Err("Failed to write domains file"))?;
+//     Ok(())
+// }
 
 
-async fn download(url: &Url, write_to_filepath: &PathBuf)
--> Result<(), Box<dyn Error>>
-{
-    debug!("Download file to {}", write_to_filepath.as_path().as_display());
-    let mut file = File::create(&write_to_filepath).await?;
-
-    let response = reqwest::get(url.clone()).await
-        .or(Err(format!("Failed to get request {}", url)))?;
-    let body = response.text().await
-        .or(Err(format!("Failed to download domains file content from {}", url)))?;
-    copy(&mut body.as_bytes(), &mut file).await
-        .or(Err("Failed to write domains file"))?;
-    Ok(())
-}
-
-
-async fn download_and_parse_domains(
-    url: &Url,
-    write_to: &mut File,
-    tmp_dir: &PathBuf,
-)
--> Result<(), Box<dyn Error>>
-// CSV file
-{
-    let start = Instant::now();
-
-    let tmp_filepath = tmp_dir.join(DOMAINS_TMP_FILENAME);
-    let _domains = match download_chunked_csv(url, &tmp_filepath).await {
-        Ok(domains) => domains,
-        Err(err) => {
-            let mut domains = BlockedDomains::new(&tmp_filepath);
-            domains.read_from_file().await?;
-            domains
-        }
-    };
-
-    let duration = start.elapsed();
-    info!("Domains csv download time: {:?}", duration);
-    Ok(())
-}
-
-
-async fn download_and_parse_nxdomains(
-    url: &Url,
-    write_to: &File
-)
--> Result<(), Box<dyn Error>>
-{
-    Ok(())
-}
