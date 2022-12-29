@@ -13,7 +13,7 @@ use trust_dns_server::{
 use reqwest::Url;
 use std::str::FromStr;
 
-use super::blocked_domains;
+use super::blocked_domains::{self, BlockedDomains};
 
 
 // pub struct DnsDB {
@@ -47,7 +47,7 @@ impl<'a> DnsServer<'a> {
         }
     }
 
-    async fn get_blocked_domains(&self) -> Result<(), Box<dyn Error>>{
+    async fn get_blocked_domains(&self) -> Result<BlockedDomains, Box<dyn Error>>{
         let domains_csv_url = Url::from_str(
             self.options.dns_blocked_domains_csv.as_str()
         )?;
@@ -65,7 +65,11 @@ impl<'a> DnsServer<'a> {
             &nxdomains_txt_url,
             self.workdir,
         ).await?;
-        Ok(())
+        Ok(blocked_domains)
+    }
+
+    async fn get_records(&self) -> Result<(), Box<dyn Error>>{
+        todo!()
     }
 
     pub async fn start(mut self)
