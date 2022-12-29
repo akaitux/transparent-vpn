@@ -1,4 +1,4 @@
-use std::collections::{BTreeMap, HashSet};
+use std::collections::{BTreeMap, HashSet, HashMap};
 use std::path::PathBuf;
 use std::error::Error;
 use std::env;
@@ -33,6 +33,7 @@ lazy_static! {
 const DOMAINS_TMP_FILENAME: &str = "_trsp_domains.csv";
 const NXDOMAINS_TMP_FILENAME: &str = "_trsp_nxdomains.txt";
 const DEFAULT_DOMAINS_HASHSET_CAP: usize = 2_000_000;
+const DEFAULT_NXDOMAINS_HASHSET_CAP: usize = 500_000;
 
 
 pub struct BlockedDomains {
@@ -54,31 +55,44 @@ impl BlockedDomains {
         write_to: &PathBuf
     ) -> Result<(), Box<dyn Error>>
     {
+        let mut file = File::create(write_to).await?;
+        let mut buf: Vec<String> = Vec::with_capacity(100);
+        for domain in domains {
+            if buf.len() == 100 {
+                file.write(buf.join("\n").as_bytes()).await?;
+                buf.clear();
+            }
+            buf.push(domain.clone());
+        }
+        if buf.len() != 0 {
+            file.write(buf.join("\n").as_bytes()).await?;
+        }
+        file.flush().await?;
         Ok(())
-        // let mut file = File::create(write_to).await?;
-        // file.write_all(domains.iter().join("\n").as_bytes()).await?;
-        // file.flush().await?;
-        // Ok(())
     }
 
     async fn read_from_file(
-        &mut self,
+        &self,
         read_from: &PathBuf,
-    ) -> Result<(), Box<dyn Error>>
+    ) -> Result<HashSet<String>, Box<dyn Error>>
     {
-        Ok(())
-        // let file = File::open(read_from).await?;
-        // let reader = BufReader::new(file);
-        // let mut lines = reader.lines();
+        let file = File::open(read_from).await?;
+        let reader = BufReader::new(file);
+        let mut lines = reader.lines();
+        let mut domains: HashSet<String> = HashSet::new();
 
-        // while let Some(line) = lines.next_line().await? {
-        //     self.domains.insert(line);
-        // }
-        // Ok(())
+        while let Some(line) = lines.next_line().await? {
+            domains.insert(line);
+        }
+        Ok(domains)
     }
 
-    fn insert(&mut self, domain: &String) {
+    fn insert_domain_string(&mut self, domain: &String) {
         self.domains.insert(domain.clone());
+    }
+
+    fn extend(&mut self, domains: HashSet<String>) {
+        self.domains.extend(domains);
     }
 
     async fn download_domains(&mut self, url: &Url)
@@ -87,17 +101,24 @@ impl BlockedDomains {
         let mut domains: HashSet<String> = HashSet::with_capacity(
             DEFAULT_DOMAINS_HASHSET_CAP
         );
-        let write_to_filepath = self.workdir.join(DOMAINS_TMP_FILENAME);
+        let cache_filepath = self.workdir.join(DOMAINS_TMP_FILENAME);
         info!(
             "Downloaded domains cache: {}",
-            write_to_filepath.as_path().as_display()
+            cache_filepath.as_path().as_display()
         );
 
         let response = reqwest::get(url.clone()).await?;
         match response.error_for_status_ref() {
             Ok(_) => debug!("Reqwest get OK: {} {}", url, response.status()),
             Err(err) => {
-                return Err(err.into())
+                error!("Load domains error: {}", err);
+                error!(
+                    "Load domains from cache file: {}",
+                    &cache_filepath.as_path().as_display()
+                );
+                self.extend(self.read_from_file(&cache_filepath).await?);
+                error!("Hey!! {}", self.domains.len());
+                return Ok(());
             }
         };
 
@@ -136,11 +157,11 @@ impl BlockedDomains {
                 }
             }
         }
-        self.write_to_file(&domains, &write_to_filepath).await?;
-        self.domains.extend(domains);
+        self.write_to_file(&domains, &cache_filepath).await?;
+        self.extend(domains);
         info!(
             "Download domains csv file completed {}, errors: {}",
-            write_to_filepath.as_path().as_display(),
+            cache_filepath.as_path().as_display(),
             errors_count,
         );
         Ok(())

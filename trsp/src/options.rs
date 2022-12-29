@@ -56,7 +56,7 @@ pub struct Options {
 
     #[clap(
         long,
-        default_value = "https://raw.githubusercontent.com/zapret-info/z-i/master/dump.csv",
+        default_value = "https://raw.githubusercontent.com/zapret-info/z-i/master/dump.cs",
         env = "TRSP_DNS_BLOCKED_DOMAINS_CSV")
     ]
     pub dns_blocked_domains_csv: String,
