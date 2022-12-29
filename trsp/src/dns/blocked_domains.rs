@@ -4,7 +4,7 @@ use std::error::Error;
 use std::env;
 use std::str::FromStr;
 use std::time::Instant;
-use tracing::{debug, info, error};
+use tracing::{debug, info, error, warn};
 use tokio::{
     io::{copy, AsyncWriteExt, AsyncBufReadExt, BufReader},
     fs::{self, File, remove_file},
@@ -87,10 +87,6 @@ impl BlockedDomains {
         Ok(domains)
     }
 
-    fn insert_domain_string(&mut self, domain: &String) {
-        self.domains.insert(domain.clone());
-    }
-
     fn extend(&mut self, domains: HashSet<String>) {
         self.domains.extend(domains);
     }
@@ -112,12 +108,18 @@ impl BlockedDomains {
             Ok(_) => debug!("Reqwest get OK: {} {}", url, response.status()),
             Err(err) => {
                 error!("Load domains error: {}", err);
-                error!(
+                warn!(
                     "Load domains from cache file: {}",
                     &cache_filepath.as_path().as_display()
                 );
-                self.extend(self.read_from_file(&cache_filepath).await?);
-                error!("Hey!! {}", self.domains.len());
+                let domains = match self.read_from_file(&cache_filepath).await {
+                    Ok(domains) => domains,
+                    Err(err) => {
+                        error!("Error while read domains cache: {}", err);
+                        domains
+                    }
+                };
+                self.extend(domains);
                 return Ok(());
             }
         };
@@ -171,9 +173,59 @@ impl BlockedDomains {
         &mut self,
         url: &Url,
     )
-    -> Result<BlockedDomains, Box<dyn Error>>
+    -> Result<(), Box<dyn Error>>
     {
-        Err("Blah".into())
+        let mut domains: HashSet<String> = HashSet::with_capacity(
+            DEFAULT_NXDOMAINS_HASHSET_CAP
+        );
+        let cache_filepath = self.workdir.join(NXDOMAINS_TMP_FILENAME);
+        info!(
+            "Downloaded nxdomains cache: {}",
+            cache_filepath.as_path().as_display()
+        );
+
+        let response = reqwest::get(url.clone()).await?;
+        match response.error_for_status_ref() {
+            Ok(_) => debug!("Reqwest get OK: {} {}", url, response.status()),
+            Err(err) => {
+                error!("Load nxdomains error: {}", err);
+                warn!(
+                    "Load nxdomains from cache file: {}",
+                    &cache_filepath.as_path().as_display()
+                );
+                let domains = match self.read_from_file(&cache_filepath).await {
+                    Ok(domains) => domains,
+                    Err(err) => {
+                        error!("Error while read nxdomains cache: {}", err);
+                        domains
+                    }
+                };
+                self.extend(domains);
+                return Ok(());
+            }
+        };
+
+        let mut buf: Vec<u8> = Vec::with_capacity(100);
+        let mut stream = response.bytes_stream();
+        while let Some(chunk) = stream.next().await {
+            for byte in chunk? {
+                if byte == b'\n' {
+                    let line = String::from_utf8(buf.clone())?;
+                    let domain = _prepare_domain_name(&line);
+                    domains.insert(domain);
+                    buf.clear();
+                } else {
+                    buf.push(byte);
+                }
+            }
+        }
+        self.write_to_file(&domains, &cache_filepath).await?;
+        self.extend(domains);
+        info!(
+            "Download nxdomains txt file completed: {}",
+            cache_filepath.as_path().as_display(),
+        );
+        Ok(())
     }
 
 
@@ -181,14 +233,14 @@ impl BlockedDomains {
 }
 
 
-// impl IntoIterator for BlockedDomains {
-//     type Item = String;
-//     type IntoIter = <Vec<String> as IntoIterator>::IntoIter;
-//
-//     fn into_iter(self) -> Self::IntoIter {
-//       self.domains.into_iter()
-//     }
-// }
+impl IntoIterator for BlockedDomains {
+    type Item = String;
+    type IntoIter = <HashSet<String> as IntoIterator>::IntoIter;
+
+    fn into_iter(self) -> Self::IntoIter {
+      self.domains.into_iter()
+    }
+}
 
 //Posibly need deref - https://stackoverflow.com/questions/70547514/how-to-implement-iterator-trait-over-wrapped-vector-in-rust
 
@@ -210,12 +262,6 @@ async fn download_and_parse(
     workdir: &PathBuf,
 ) -> Result<BlockedDomains, Box<dyn Error>>
 {
-    // let domains_filepath = workdir.join("trsp_domains_downl.txt");
-    // let mut domains_file = File::create(
-    //     &domains_filepath
-    // ).await.or(
-    //     Err(format!("Failed to create file '{}'", domains_filepath.as_path().as_display()))
-    // )?;
     let mut domains = BlockedDomains::new(workdir);
 
     let start = Instant::now();
@@ -229,15 +275,6 @@ async fn download_and_parse(
         let duration = start.elapsed();
         info!("NXDomains load time: {:?}", duration);
     }
-    // let mut domains = download_and_parse_domains(
-    //     &domains_url,
-    //     &mut domains_file,
-    //     &tmp_dir
-    // ).await?;
-    // if let Some(url) = nxdomains_url {
-    //     let nx_domains = download_and_parse_nxdomains(url, &domains_file).await?;
-    //     domains.merge(&nx_domains);
-    // }
     return Ok(domains)
 }
 

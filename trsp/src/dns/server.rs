@@ -60,7 +60,7 @@ impl<'a> DnsServer<'a> {
                 )?);
             }
         }
-        let _blah = blocked_domains::get_blocked_domains(
+        let blocked_domains = blocked_domains::get_blocked_domains(
             &domains_csv_url,
             &nxdomains_txt_url,
             self.workdir,

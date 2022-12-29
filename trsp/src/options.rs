@@ -63,7 +63,7 @@ pub struct Options {
 
     #[clap(
         long,
-        default_value = "https://raw.githubusercontent.com/zapret-info/z-i/master/nxdomain.txt",
+        default_value = "https://raw.githubusercontent.com/zapret-info/z-i/master/nxdomain.tx",
         env = "TRSP_DNS_BLOCKED_NXDOMAINS_TXT")
     ]
     pub dns_blocked_nxdomains_txt: String,
