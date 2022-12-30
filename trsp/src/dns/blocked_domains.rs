@@ -1,24 +1,17 @@
-use std::collections::{BTreeMap, HashSet, HashMap};
+use std::collections::HashSet;
 use std::path::PathBuf;
 use std::error::Error;
 use std::env;
-use std::str::FromStr;
 use std::time::Instant;
 use tracing::{debug, info, error, warn};
 use tokio::{
-    io::{copy, AsyncWriteExt, AsyncBufReadExt, BufReader},
-    fs::{self, File, remove_file},
+    io::{AsyncWriteExt, AsyncBufReadExt, BufReader},
+    fs::File,
 };
 use tokio_stream::StreamExt;
-use crate::options::Options;
 
 use reqwest::Url;
 use thiserror::__private::PathAsDisplay;
-use trust_dns_server::{
-    proto::rr::RecordType,
-    client::rr::{RrKey, RecordSet, Name, LowerName},
-    store::in_memory::InMemoryAuthority,
-};
 use encoding_rs::WINDOWS_1251;
 
 use lazy_static::lazy_static;

@@ -8,6 +8,8 @@ use std::{error::Error, path::PathBuf};
 use std::time::Duration;
 use trust_dns_server::{
     server::ServerFuture,
+    client::rr::{RrKey, RecordSet, Name, LowerName},
+    proto::rr::RecordType,
     proto::error::ProtoError,
 };
 use reqwest::Url;
