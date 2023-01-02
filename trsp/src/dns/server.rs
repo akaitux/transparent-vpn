@@ -18,19 +18,6 @@ use std::str::FromStr;
 use super::blocked_domains::{self, Domains};
 
 
-// pub struct DnsDB {
-//     db: Arc<Mutex<HashMap<String, IpAddr>>>,
-// }
-//
-// impl DnsDB {
-//     pub fn new() -> Self {
-//         Self {
-//             db: Arc::new(Mutex::new(HashMap::new())),
-//         }
-//     }
-// }
-
-
 pub struct DnsServer<'a> {
     pub server: Option<ServerFuture<Handler>>,
     // pub db: DnsDB,
@@ -40,8 +27,6 @@ pub struct DnsServer<'a> {
 
 impl<'a> DnsServer<'a> {
     pub fn new(options: &'a Options, workdir: &'a PathBuf) -> Self {
-        // Reinit in start()
-        let handler = Handler::new(&options);
         Self {
             server: None,
             options,
