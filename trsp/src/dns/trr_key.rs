@@ -1,5 +1,6 @@
 use std::cmp::Ordering;
 
+use tokio::time::Instant;
 use trust_dns_server::client::rr::{LowerName, RecordType};
 
 /// Accessor key for RRSets in the Authority.
@@ -9,22 +10,16 @@ pub struct TRrKey {
     pub name: LowerName,
     /// Matches the type of the Record of this key
     pub record_type: RecordType,
+    pub resolved_at: Option<Instant>,
 }
 
 impl TRrKey {
-    /// Creates a new key to access the Authority.
-    ///
-    /// # Arguments
-    ///
-    /// * `name` - domain name to lookup.
-    /// * `record_type` - the `RecordType` to lookup.
-    ///
-    /// # Return value
-    ///
-    /// A new key to access the Authorities.
-    /// TODO: make all cloned params pass by value.
     pub fn new(name: LowerName, record_type: RecordType) -> Self {
-        Self { name, record_type }
+        Self {
+            name,
+            record_type,
+            resolved_at: None,
+        }
     }
 
     /// Returns the name of the key
