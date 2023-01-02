@@ -71,6 +71,20 @@ pub struct Options {
     #[clap(long, action, default_value_t=false, env="TRSP_DNS_USE_NXDOMAINS")]
     pub dns_use_nxdomains: bool,
 
+    #[clap(
+        long,
+        default_value = "",
+        env = "TRSP_DNS_EXCLUDED_DOMAINS_FILE")
+    ]
+    pub dns_excluded_domains_file: String,
+
+    #[clap(
+        long,
+        default_value = "",
+        env = "TRSP_DNS_INCLUDED_DOMAINS_FILE")
+    ]
+    pub dns_included_domains_file: String,
+
 
     // WEB
     #[clap(long, default_value = "0.0.0.0:80", env = "TRSP_WEB_ADDR")]

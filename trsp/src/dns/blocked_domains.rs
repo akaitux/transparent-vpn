@@ -29,20 +29,93 @@ const DEFAULT_DOMAINS_HASHSET_CAP: usize = 2_000_000;
 const DEFAULT_NXDOMAINS_HASHSET_CAP: usize = 500_000;
 
 
-pub struct Domains {
-    domains: HashSet<String>,
-    workdir: PathBuf,
+pub async fn get_blocked_domains(
+    domains_csv_url: &Url,
+    nxdomais_txt_url: &Option<Url>,
+    workdir: &PathBuf,
+) -> Result<Domains, Box<dyn Error>>
+{
+    let tmp_dir = env::temp_dir();
+    debug!("Temp dir for downloads is {}", tmp_dir.as_path().as_display());
+    download_and_parse(domains_csv_url, nxdomais_txt_url, workdir).await
 }
 
+
+pub async fn get_domains_from_file(read_from: &PathBuf)
+-> Result<Domains, Box<dyn Error>>
+{
+    let mut domains = Domains::new(None);
+    domains.domains = Domains::read_domains_from_file(read_from).await?;
+    Ok(domains)
+}
+
+
+async fn download_and_parse(
+    domains_url: &Url,
+    nxdomains_url: &Option<Url>,
+    workdir: &PathBuf,
+) -> Result<Domains, Box<dyn Error>>
+{
+    let mut domains = Domains::new(Some(workdir));
+
+    let start = Instant::now();
+    domains.download_domains(&domains_url).await?;
+    let duration = start.elapsed();
+    info!("Domains load time: {:?}", duration);
+
+    if let Some(url) = nxdomains_url {
+        let start = Instant::now();
+        domains.download_nxdomains(url).await?;
+        let duration = start.elapsed();
+        info!("NXDomains load time: {:?}", duration);
+    }
+    return Ok(domains)
+}
+
+
+fn _prepare_csv_domain(buf: &Vec<u8>) -> Result<String, Box<dyn Error>> {
+    let (enc_res, _, had_errors) = WINDOWS_1251.decode(&buf);
+    if had_errors {
+        return Err("Error while parsing csv domain from cp1251".into());
+    }
+    let domain = String::from(enc_res);
+    Ok(_prepare_domain_name(&domain))
+}
+
+fn _prepare_domain_name(domain: &String) -> String {
+    if domain.contains("\\") {
+        return "".into()
+    }
+    if ! DOMAIN_RE.is_match(domain.as_ref()) {
+        return "".into()
+    }
+    // let domain = domain.replace("*.", "");
+    let domain = match domain.strip_suffix(".") {
+        Some(s) => String::from(s),
+        None => String::from(domain),
+    };
+    domain
+}
+
+
+
+pub struct Domains {
+    domains: HashSet<String>,
+    workdir: Option<PathBuf>,
+}
+
+
 impl Domains {
-    fn new(workdir: &PathBuf) -> Self {
-        Self {
-            domains: HashSet::with_capacity(DEFAULT_DOMAINS_HASHSET_CAP),
-            workdir: workdir.clone(),
+    fn new(workdir: Option<&PathBuf>) -> Self {
+        let domains = HashSet::with_capacity(DEFAULT_DOMAINS_HASHSET_CAP);
+        if let Some(d) = workdir {
+            Self {domains, workdir: Some(d.clone())}
+        } else {
+            Self {domains, workdir: None}
         }
     }
 
-    async fn write_to_file(
+    async fn write_domains_to_file(
         &self,
         domains: &HashSet<String>,
         write_to: &PathBuf
@@ -64,8 +137,7 @@ impl Domains {
         Ok(())
     }
 
-    async fn read_from_file(
-        &self,
+    async fn read_domains_from_file(
         read_from: &PathBuf,
     ) -> Result<HashSet<String>, Box<dyn Error>>
     {
@@ -90,7 +162,11 @@ impl Domains {
         let mut domains: HashSet<String> = HashSet::with_capacity(
             DEFAULT_DOMAINS_HASHSET_CAP
         );
-        let cache_filepath = self.workdir.join(DOMAINS_TMP_FILENAME);
+        let cache_filepath = if let Some(p) = self.workdir.as_ref() {
+            p.join(DOMAINS_TMP_FILENAME)
+        } else {
+            return Err("No cache file for domains".into())
+        };
         info!(
             "Downloaded domains cache: {}",
             cache_filepath.as_path().as_display()
@@ -105,7 +181,7 @@ impl Domains {
                     "Load domains from cache file: {}",
                     &cache_filepath.as_path().as_display()
                 );
-                let domains = match self.read_from_file(&cache_filepath).await {
+                let domains = match Domains::read_domains_from_file(&cache_filepath).await {
                     Ok(domains) => domains,
                     Err(err) => {
                         error!("Error while read domains cache: {}", err);
@@ -152,7 +228,7 @@ impl Domains {
                 }
             }
         }
-        self.write_to_file(&domains, &cache_filepath).await?;
+        self.write_domains_to_file(&domains, &cache_filepath).await?;
         self.extend(domains);
         info!(
             "Download domains csv file completed {}, errors: {}",
@@ -171,7 +247,12 @@ impl Domains {
         let mut domains: HashSet<String> = HashSet::with_capacity(
             DEFAULT_NXDOMAINS_HASHSET_CAP
         );
-        let cache_filepath = self.workdir.join(NXDOMAINS_TMP_FILENAME);
+
+        let cache_filepath = if let Some(p) = self.workdir.as_ref() {
+            p.join(NXDOMAINS_TMP_FILENAME)
+        } else {
+            return Err("No cache file for nxdomains".into())
+        };
         info!(
             "Downloaded nxdomains cache: {}",
             cache_filepath.as_path().as_display()
@@ -186,7 +267,7 @@ impl Domains {
                     "Load nxdomains from cache file: {}",
                     &cache_filepath.as_path().as_display()
                 );
-                let domains = match self.read_from_file(&cache_filepath).await {
+                let domains = match Domains::read_domains_from_file(&cache_filepath).await {
                     Ok(domains) => domains,
                     Err(err) => {
                         error!("Error while read nxdomains cache: {}", err);
@@ -212,7 +293,7 @@ impl Domains {
                 }
             }
         }
-        self.write_to_file(&domains, &cache_filepath).await?;
+        self.write_domains_to_file(&domains, &cache_filepath).await?;
         self.extend(domains);
         info!(
             "Download nxdomains txt file completed: {}",
@@ -232,72 +313,12 @@ impl IntoIterator for Domains {
     }
 }
 
-//Posibly need deref - https://stackoverflow.com/questions/70547514/how-to-implement-iterator-trait-over-wrapped-vector-in-rust
 
-pub async fn get_blocked_domains(
-    domains_csv_url: &Url,
-    nxdomais_txt_url: &Option<Url>,
-    workdir: &PathBuf,
-) -> Result<Domains, Box<dyn Error>>
-{
-    let tmp_dir = env::temp_dir();
-    debug!("Temp dir for downloads is {}", tmp_dir.as_path().as_display());
-    download_and_parse(domains_csv_url, nxdomais_txt_url, workdir).await
-}
-
-
-async fn download_and_parse(
-    domains_url: &Url,
-    nxdomains_url: &Option<Url>,
-    workdir: &PathBuf,
-) -> Result<Domains, Box<dyn Error>>
-{
-    let mut domains = Domains::new(workdir);
-
-    let start = Instant::now();
-    domains.download_domains(&domains_url).await?;
-    let duration = start.elapsed();
-    info!("Domains load time: {:?}", duration);
-
-    if let Some(url) = nxdomains_url {
-        let start = Instant::now();
-        domains.download_nxdomains(url).await?;
-        let duration = start.elapsed();
-        info!("NXDomains load time: {:?}", duration);
-    }
-    return Ok(domains)
-}
-
-
-fn _prepare_csv_domain(buf: &Vec<u8>) -> Result<String, Box<dyn Error>> {
-    let (enc_res, _, had_errors) = WINDOWS_1251.decode(&buf);
-    if had_errors {
-        return Err("Error while parsing csv domain from cp1251".into());
-    }
-    let domain = String::from(enc_res);
-    Ok(_prepare_domain_name(&domain))
-}
-
-fn _prepare_domain_name(domain: &String) -> String {
-    if domain.contains("\\") {
-        return "".into()
-    }
-    if ! DOMAIN_RE.is_match(domain.as_ref()) {
-        return "".into()
-    }
-    // let domain = domain.replace("*.", "");
-    let domain = match domain.strip_suffix(".") {
-        Some(s) => String::from(s),
-        None => String::from(domain),
-    };
-    domain
-}
-
-// async fn download(url: &Url, write_to_filepath: &PathBuf)
+// async fn download(url: &Url, write_domains_to_filepath: &PathBuf)
 // -> Result<(), Box<dyn Error>>
 // {
-//     debug!("Download file to {}", write_to_filepath.as_path().as_display());
-//     let mut file = File::create(&write_to_filepath).await?;
+//     debug!("Download file to {}", write_domains_to_filepath.as_path().as_display());
+//     let mut file = File::create(&write_domains_to_filepath).await?;
 //
 //     let response = reqwest::get(url.clone()).await
 //         .or(Err(format!("Failed to get request {}", url)))?;

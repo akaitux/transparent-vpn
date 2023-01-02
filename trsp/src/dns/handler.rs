@@ -12,6 +12,8 @@ use trust_dns_server::{
 };
 use tracing::error;
 
+use super::blocked_domains::Domains;
+
 
 #[derive(thiserror::Error, Debug)]
 pub enum Error {
@@ -27,6 +29,9 @@ pub enum Error {
 
 
 pub struct Handler {
+    pub included_domains: Option<Domains>,
+    pub excluded_domains: Option<Domains>,
+    pub blocked_domains: Option<Domains>,
     forwarder: Catalog,
 }
 
@@ -34,6 +39,9 @@ impl Handler {
     pub fn new(options: &Options) -> Self {
         // https://github.com/bluejekyll/trust-dns/blob/main/crates/resolver/src/config.rs
         Handler {
+            included_domains: None,
+            excluded_domains: None,
+            blocked_domains: None,
             forwarder: Self::create_forwarder(options),
         }
     }

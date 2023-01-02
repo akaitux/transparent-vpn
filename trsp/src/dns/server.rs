@@ -32,7 +32,7 @@ use super::blocked_domains::{self, Domains};
 
 
 pub struct DnsServer<'a> {
-    pub server: ServerFuture<Handler>,
+    pub server: Option<ServerFuture<Handler>>,
     // pub db: DnsDB,
     options: &'a Options,
     workdir: &'a PathBuf,
@@ -40,10 +40,10 @@ pub struct DnsServer<'a> {
 
 impl<'a> DnsServer<'a> {
     pub fn new(options: &'a Options, workdir: &'a PathBuf) -> Self {
+        // Reinit in start()
         let handler = Handler::new(&options);
         Self {
-            server: ServerFuture::new(handler),
-            // db: DnsDB::new(),
+            server: None,
             options,
             workdir,
         }
@@ -70,29 +70,36 @@ impl<'a> DnsServer<'a> {
         Ok(blocked_domains)
     }
 
-    async fn get_records(&self) -> Result<(), Box<dyn Error>>{
+    async fn get_records(&self) -> Result<(), Box<dyn Error>> {
         todo!()
     }
 
     pub async fn start(mut self)
-        -> Result<JoinHandle<Result<(), ProtoError>>, Box<dyn Error>> {
-        self.get_blocked_domains().await?;
+        -> Result<JoinHandle<Result<(), ProtoError>>, Box<dyn Error>>
+    {
+        let mut handler = Handler::new(&self.options);
+        let blocked_domains = self.get_blocked_domains().await?;
+        handler.blocked_domains = Some(blocked_domains);
+
+        let mut server = ServerFuture::new(handler);
+
         let tcp_timeout = Duration::from_secs(
             self.options.dns_tcp_timeout.into()
         );
 
         for udp in &self.options.dns_udp {
-            self.server.register_socket(UdpSocket::bind(udp).await?);
+            server.register_socket(UdpSocket::bind(udp).await?);
         }
 
         for tcp in &self.options.dns_tcp {
-            self.server.register_listener(
+            server.register_listener(
                 TcpListener::bind(&tcp).await?,
                 tcp_timeout,
             );
         }
 
-        let dns_join = tokio::spawn(self.server.block_until_done());
+        self.server = Some(server);
+        let dns_join = tokio::spawn(self.server.unwrap().block_until_done());
         Ok(dns_join)
     }
 }
