@@ -56,14 +56,14 @@ pub struct Options {
 
     #[clap(
         long,
-        default_value = "https://raw.githubusercontent.com/zapret-info/z-i/master/dump.cs",
+        default_value = "https://raw.githubusercontent.com/zapret-info/z-i/master/dump.csv",
         env = "TRSP_DNS_BLOCKED_DOMAINS_CSV")
     ]
     pub dns_blocked_domains_csv: String,
 
     #[clap(
         long,
-        default_value = "https://raw.githubusercontent.com/zapret-info/z-i/master/nxdomain.tx",
+        default_value = "https://raw.githubusercontent.com/zapret-info/z-i/master/nxdomain.txt",
         env = "TRSP_DNS_BLOCKED_NXDOMAINS_TXT")
     ]
     pub dns_blocked_nxdomains_txt: String,

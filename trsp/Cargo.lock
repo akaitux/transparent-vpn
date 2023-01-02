@@ -2097,6 +2097,7 @@ dependencies = [
  "clap",
  "config",
  "encoding_rs",
+ "futures-util",
  "lazy_static",
  "npm_rs",
  "poem",

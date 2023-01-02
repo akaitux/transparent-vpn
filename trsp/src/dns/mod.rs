@@ -1,4 +1,4 @@
 pub mod server;
-mod vpn_catalog;
+mod trsp_authority;
 mod handler;
 mod blocked_domains;

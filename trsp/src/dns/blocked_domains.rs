@@ -23,18 +23,18 @@ lazy_static! {
 }
 
 
-const DOMAINS_TMP_FILENAME: &str = "_trsp_domains.csv";
-const NXDOMAINS_TMP_FILENAME: &str = "_trsp_nxdomains.txt";
+const DOMAINS_TMP_FILENAME: &str = "_trsp_domains";
+const NXDOMAINS_TMP_FILENAME: &str = "_trsp_nxdomains";
 const DEFAULT_DOMAINS_HASHSET_CAP: usize = 2_000_000;
 const DEFAULT_NXDOMAINS_HASHSET_CAP: usize = 500_000;
 
 
-pub struct BlockedDomains {
+pub struct Domains {
     domains: HashSet<String>,
     workdir: PathBuf,
 }
 
-impl BlockedDomains {
+impl Domains {
     fn new(workdir: &PathBuf) -> Self {
         Self {
             domains: HashSet::with_capacity(DEFAULT_DOMAINS_HASHSET_CAP),
@@ -220,13 +220,10 @@ impl BlockedDomains {
         );
         Ok(())
     }
-
-
-
 }
 
 
-impl IntoIterator for BlockedDomains {
+impl IntoIterator for Domains {
     type Item = String;
     type IntoIter = <HashSet<String> as IntoIterator>::IntoIter;
 
@@ -241,7 +238,7 @@ pub async fn get_blocked_domains(
     domains_csv_url: &Url,
     nxdomais_txt_url: &Option<Url>,
     workdir: &PathBuf,
-) -> Result<BlockedDomains, Box<dyn Error>>
+) -> Result<Domains, Box<dyn Error>>
 {
     let tmp_dir = env::temp_dir();
     debug!("Temp dir for downloads is {}", tmp_dir.as_path().as_display());
@@ -253,9 +250,9 @@ async fn download_and_parse(
     domains_url: &Url,
     nxdomains_url: &Option<Url>,
     workdir: &PathBuf,
-) -> Result<BlockedDomains, Box<dyn Error>>
+) -> Result<Domains, Box<dyn Error>>
 {
-    let mut domains = BlockedDomains::new(workdir);
+    let mut domains = Domains::new(workdir);
 
     let start = Instant::now();
     domains.download_domains(&domains_url).await?;
