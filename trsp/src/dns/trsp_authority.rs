@@ -18,11 +18,13 @@ use trust_dns_server::{
         op::ResponseCode,
         rr::{
             rdata::SOA,
-            {DNSClass, LowerName, Name, RData, Record, RecordSet, RecordType, RrKey},
+            {DNSClass, LowerName, Name, RData, Record, RecordSet, RecordType},
         },
     },
     server::RequestInfo,
 };
+
+use crate::dns::trr_key::TRrKey;
 
 /// InMemoryAuthority is responsible for storing the resource records for a particular zone.
 ///
@@ -53,7 +55,7 @@ impl TrspAuthority {
     /// The new `Authority`.
     pub fn new(
         origin: Name,
-        records: BTreeMap<RrKey, RecordSet>,
+        records: BTreeMap<TRrKey, RecordSet>,
         zone_type: ZoneType,
         allow_axfr: bool,
     ) -> Result<Self, String> {
@@ -121,7 +123,7 @@ impl TrspAuthority {
     }
 
     /// Get all the records
-    pub async fn records(&self) -> BTreeMap<RrKey, Arc<RecordSet>> {
+    pub async fn records(&self) -> BTreeMap<TRrKey, Arc<RecordSet>> {
         let records = RwLockReadGuard::map(self.inner.read().await, |i| &i.records);
         records.clone()
     }
@@ -129,12 +131,12 @@ impl TrspAuthority {
     /// Get a mutable reference to the records
     pub async fn records_mut(
         &self,
-    ) -> impl DerefMut<Target = BTreeMap<RrKey, Arc<RecordSet>>> + '_ {
+    ) -> impl DerefMut<Target = BTreeMap<TRrKey, Arc<RecordSet>>> + '_ {
         RwLockWriteGuard::map(self.inner.write().await, |i| &mut i.records)
     }
 
     /// Get a mutable reference to the records
-    pub fn records_get_mut(&mut self) -> &mut BTreeMap<RrKey, Arc<RecordSet>> {
+    pub fn records_get_mut(&mut self) -> &mut BTreeMap<TRrKey, Arc<RecordSet>> {
         &mut self.inner.get_mut().records
     }
 
@@ -172,14 +174,14 @@ impl TrspAuthority {
 
 #[derive(Default)]
 struct InnerInMemory {
-    records: BTreeMap<RrKey, Arc<RecordSet>>,
+    records: BTreeMap<TRrKey, Arc<RecordSet>>,
 }
 
 impl InnerInMemory {
     /// Retrieve the Signer, which contains the private keys, for this zone
     fn inner_soa(&self, origin: &LowerName) -> Option<&SOA> {
-        // TODO: can't there be an RrKeyRef?
-        let rr_key = RrKey::new(origin.clone(), RecordType::SOA);
+        // TODO: can't there be an TRrKeyRef?
+        let rr_key = TRrKey::new(origin.clone(), RecordType::SOA);
 
         self.records
             .get(&rr_key)
@@ -225,8 +227,8 @@ impl InnerInMemory {
         lookup_options: LookupOptions,
     ) -> Option<Arc<RecordSet>> {
         // this range covers all the records for any of the RecordTypes at a given label.
-        let start_range_key = RrKey::new(name.clone(), RecordType::Unknown(u16::min_value()));
-        let end_range_key = RrKey::new(name.clone(), RecordType::Unknown(u16::max_value()));
+        let start_range_key = TRrKey::new(name.clone(), RecordType::Unknown(u16::min_value()));
+        let end_range_key = TRrKey::new(name.clone(), RecordType::Unknown(u16::max_value()));
 
         fn aname_covers_type(key_type: RecordType, query_type: RecordType) -> bool {
             (query_type == RecordType::A || query_type == RecordType::AAAA)
@@ -399,8 +401,8 @@ impl InnerInMemory {
 
         // check that CNAME and ANAME is either not already present, or no other records are if it's a CNAME
         let start_range_key =
-            RrKey::new(record.name().into(), RecordType::Unknown(u16::min_value()));
-        let end_range_key = RrKey::new(record.name().into(), RecordType::Unknown(u16::max_value()));
+            TRrKey::new(record.name().into(), RecordType::Unknown(u16::min_value()));
+        let end_range_key = TRrKey::new(record.name().into(), RecordType::Unknown(u16::max_value()));
 
         let multiple_records_at_label_disallowed = self
             .records
@@ -420,7 +422,7 @@ impl InnerInMemory {
             return false;
         }
 
-        let rr_key = RrKey::new(record.name().into(), record.rr_type());
+        let rr_key = TRrKey::new(record.name().into(), record.rr_type());
         let records: &mut Arc<RecordSet> = self
             .records
             .entry(rr_key)
