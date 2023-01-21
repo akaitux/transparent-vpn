@@ -4,7 +4,7 @@ use tokio::{
     task::JoinHandle,
     net::{TcpListener, UdpSocket},
 };
-use std::{error::Error, path::PathBuf};
+use std::{error::Error, path::PathBuf, sync::{Arc, RwLock}};
 use std::time::Duration;
 use trust_dns_server::{
     server::ServerFuture,
@@ -15,7 +15,8 @@ use trust_dns_server::{
 use reqwest::Url;
 use std::str::FromStr;
 
-use super::blocked_domains::{self, Domains};
+use super::domains::{Domains, get_blocked_domains};
+use super::domains_set::DomainsSet;
 
 
 pub struct DnsServer<'a> {
@@ -23,6 +24,7 @@ pub struct DnsServer<'a> {
     // pub db: DnsDB,
     options: &'a Options,
     workdir: &'a PathBuf,
+    domains: Option<Arc<RwLock<DomainsSet>>>,
 }
 
 impl<'a> DnsServer<'a> {
@@ -31,6 +33,7 @@ impl<'a> DnsServer<'a> {
             server: None,
             options,
             workdir,
+            domains: None,
         }
     }
 
@@ -47,12 +50,18 @@ impl<'a> DnsServer<'a> {
                 )?);
             }
         }
-        let blocked_domains = blocked_domains::get_blocked_domains(
+        let blocked_domains = get_blocked_domains(
             &domains_csv_url,
             &nxdomains_txt_url,
             self.workdir,
         ).await?;
         Ok(blocked_domains)
+    }
+
+    async fn get_domains_set(&self) -> Result<DomainsSet, Box<dyn Error>> {
+        let mut domains_set = DomainsSet::new(Some(self.workdir));
+        domains_set.blocked_domains = self.get_blocked_domains().await?;
+        return Ok(domains_set)
     }
 
     async fn get_records(&self) -> Result<(), Box<dyn Error>> {
@@ -63,8 +72,9 @@ impl<'a> DnsServer<'a> {
         -> Result<JoinHandle<Result<(), ProtoError>>, Box<dyn Error>>
     {
         let mut handler = Handler::new(&self.options);
-        let blocked_domains = self.get_blocked_domains().await?;
-        handler.blocked_domains = Some(blocked_domains);
+        let domains = Arc::new(RwLock::new(self.get_domains_set().await?));
+        handler.domains = Some(domains.clone());
+        self.domains = Some(domains.clone());
 
         let mut server = ServerFuture::new(handler);
 
@@ -86,6 +96,15 @@ impl<'a> DnsServer<'a> {
         self.server = Some(server);
         let dns_join = tokio::spawn(self.server.unwrap().block_until_done());
         Ok(dns_join)
+    }
+
+    pub async fn update_blocked_domains(&mut self) -> Result<(), Box<dyn Error>> {
+        if let Some(domains) = &self.domains {
+            let arc = Arc::clone(&domains);
+            let mut domains = arc.write().unwrap();
+            domains.update_blocked_domains().await?
+        }
+        return Ok(())
     }
 }
 

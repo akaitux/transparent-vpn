@@ -1,7 +1,6 @@
-use std::net::SocketAddr;
+use std::{net::SocketAddr, sync::{RwLock, Arc}};
 
 use crate::options::Options;
-use std::sync::Arc;
 use trust_dns_server::{
     proto::op::{Header, OpCode, MessageType, ResponseCode},
     server::{Request, RequestHandler, ResponseHandler, ResponseInfo},
@@ -12,7 +11,8 @@ use trust_dns_server::{
 };
 use tracing::error;
 
-use super::blocked_domains::Domains;
+use super::domains::Domains;
+use super::domains_set::DomainsSet;
 
 
 #[derive(thiserror::Error, Debug)]
@@ -29,9 +29,7 @@ pub enum Error {
 
 
 pub struct Handler {
-    pub included_domains: Option<Domains>,
-    pub excluded_domains: Option<Domains>,
-    pub blocked_domains: Option<Domains>,
+    pub domains: Option<Arc<RwLock<DomainsSet>>>,
     forwarder: Catalog,
 }
 
@@ -39,9 +37,7 @@ impl Handler {
     pub fn new(options: &Options) -> Self {
         // https://github.com/bluejekyll/trust-dns/blob/main/crates/resolver/src/config.rs
         Handler {
-            included_domains: None,
-            excluded_domains: None,
-            blocked_domains: None,
+            domains: None,
             forwarder: Self::create_forwarder(options),
         }
     }
