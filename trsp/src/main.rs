@@ -90,6 +90,12 @@ async fn main() -> Result<(), Box<dyn error::Error>> {
             std::process::exit(1);
         }
     };
+    use tokio::time::{sleep, Duration};
+
+    println!("!!!! > Sleeep...");
+    sleep(Duration::from_secs(10)).await;
+    println!("!!!! > Wakeup!...");
+    dns_server.update_blocked_domains().await?;
 
     let web_server = web_server::server::WebServer::new(&options);
     let web_handler = web_server.start().await.expect("Web server init failed");
