@@ -20,8 +20,6 @@ use super::domains_set::DomainsSet;
 
 
 pub struct DnsServer<'a> {
-    pub server: Option<ServerFuture<Handler>>,
-    // pub db: DnsDB,
     options: &'a Options,
     workdir: &'a PathBuf,
     domains: Option<Arc<RwLock<DomainsSet>>>,
@@ -30,7 +28,6 @@ pub struct DnsServer<'a> {
 impl<'a> DnsServer<'a> {
     pub fn new(options: &'a Options, workdir: &'a PathBuf) -> Self {
         Self {
-            server: None,
             options,
             workdir,
             domains: None,
@@ -68,7 +65,7 @@ impl<'a> DnsServer<'a> {
         todo!()
     }
 
-    pub async fn start(mut self)
+    pub async fn start(&mut self)
         -> Result<JoinHandle<Result<(), ProtoError>>, Box<dyn Error>>
     {
         let mut handler = Handler::new(&self.options);
@@ -93,8 +90,8 @@ impl<'a> DnsServer<'a> {
             );
         }
 
-        self.server = Some(server);
-        let dns_join = tokio::spawn(self.server.unwrap().block_until_done());
+        let dns_join = tokio::spawn(server.block_until_done());
+
         Ok(dns_join)
     }
 

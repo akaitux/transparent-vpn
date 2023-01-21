@@ -82,7 +82,7 @@ async fn main() -> Result<(), Box<dyn error::Error>> {
     };
 
     let dns_workdir = workdir.join("dns");
-    let dns_server = dns::server::DnsServer::new(&options, &dns_workdir);
+    let mut dns_server = dns::server::DnsServer::new(&options, &dns_workdir);
     let dns_handler = match dns_server.start().await {
         Ok(dns_handler) => dns_handler,
         Err(err) => {
