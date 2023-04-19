@@ -1,7 +1,11 @@
 use std::path::PathBuf;
 use std::error::Error;
+use std::sync::{RwLock, Arc};
 
 use super::domains::Domains;
+
+
+pub type TDomainsSet = Arc<RwLock<DomainsSet>>;
 
 
 pub struct DomainsSet {

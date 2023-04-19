@@ -68,10 +68,11 @@ impl<'a> DnsServer<'a> {
     pub async fn start(&mut self)
         -> Result<JoinHandle<Result<(), ProtoError>>, Box<dyn Error>>
     {
-        let mut handler = Handler::new(&self.options);
         let domains = Arc::new(RwLock::new(self.get_domains_set().await?));
-        handler.domains = Some(domains.clone());
         self.domains = Some(domains.clone());
+
+        let mut handler = Handler::new(&self.options, domains);
+        // handler.domains = Some(domains.clone());
 
         let mut server = ServerFuture::new(handler);
 

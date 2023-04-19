@@ -24,17 +24,16 @@ use trust_dns_server::{
     server::RequestInfo,
 };
 
+use std::error::Error;
 use crate::dns::trr_key::TRrKey;
+use super::domains_set::TDomainsSet;
 
 /// InMemoryAuthority is responsible for storing the resource records for a particular zone.
 ///
 /// Authorities default to DNSClass IN. The ZoneType specifies if this should be treated as the
 /// start of authority for the zone, is a Secondary, or a cached zone.
-pub struct TrspAuthority{
-    origin: LowerName,
-    class: DNSClass,
-    zone_type: ZoneType,
-    allow_axfr: bool,
+pub struct TrspAuthority {
+    domains: TDomainsSet,
     inner: RwLock<InnerInMemory>,
 }
 
@@ -54,14 +53,12 @@ impl TrspAuthority {
     ///
     /// The new `Authority`.
     pub fn new(
-        origin: Name,
-        records: BTreeMap<TRrKey, RecordSet>,
-        zone_type: ZoneType,
-        allow_axfr: bool,
-    ) -> Result<Self, String> {
-        let mut this = Self::empty(origin.clone(), zone_type, allow_axfr);
+        domains: TDomainsSet,
+    ) -> Result<Self, Box<dyn Error>> {
+        let mut this = Self::empty(domains);
         let inner = this.inner.get_mut();
 
+        // records: BTreeMap<TRrKey, RecordSet>,
         // SOA must be present
         let serial = records
             .iter()
@@ -84,7 +81,7 @@ impl TrspAuthority {
                     return Err(format!(
                         "Failed to insert {} {} to zone: {}",
                         name, rr_type, origin
-                    ));
+                    ).into());
                 };
             }
         }
@@ -97,12 +94,9 @@ impl TrspAuthority {
     /// # Warning
     ///
     /// This is an invalid zone, SOA must be added
-    pub fn empty(origin: Name, zone_type: ZoneType, allow_axfr: bool) -> Self {
+    pub fn empty(domains: TDomainsSet) -> Self {
         Self {
-            origin: LowerName::new(&origin),
-            class: DNSClass::IN,
-            zone_type,
-            allow_axfr,
+            domains,
             inner: RwLock::new(InnerInMemory::default()),
         }
     }

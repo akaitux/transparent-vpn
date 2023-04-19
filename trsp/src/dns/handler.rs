@@ -11,8 +11,8 @@ use trust_dns_server::{
 };
 use tracing::error;
 
-use super::domains::Domains;
-use super::domains_set::DomainsSet;
+use super::domains_set::TDomainsSet;
+use super::trsp_authority::TrspAuthority;
 
 
 #[derive(thiserror::Error, Debug)]
@@ -28,17 +28,21 @@ pub enum Error {
 }
 
 
+
+
 pub struct Handler {
-    pub domains: Option<Arc<RwLock<DomainsSet>>>,
+    pub domains: TDomainsSet,
     forwarder: Catalog,
+    resolver: Catalog,
 }
 
 impl Handler {
-    pub fn new(options: &Options) -> Self {
+    pub fn new(options: &Options, domains: TDomainsSet) -> Self {
         // https://github.com/bluejekyll/trust-dns/blob/main/crates/resolver/src/config.rs
         Handler {
-            domains: None,
+            domains,
             forwarder: Self::create_forwarder(options),
+            resolver: Self::create_resolver(options, domains),
         }
     }
 
@@ -56,6 +60,16 @@ impl Handler {
             );
             ns_group.merge(_config);
         }
+    }
+
+    fn create_resolver(options: &Options, domains: TDomainsSet) -> Catalog {
+        let trsp_authority = TrspAuthority::new(domains);
+        let mut catalog = Catalog::new();
+        catalog.upsert(
+            LowerName::new(&Name::root()),
+            Box::new(Arc::new(trsp_authority)),
+        );
+        return catalog
     }
 
     fn create_forwarder(options: &Options) -> Catalog {
