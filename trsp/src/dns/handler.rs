@@ -6,7 +6,7 @@ use trust_dns_server::{
     server::{Request, RequestHandler, ResponseHandler, ResponseInfo},
     store::forwarder::{ForwardAuthority, ForwardConfig},
     client::rr::{LowerName, Name},
-    resolver::config::NameServerConfigGroup,
+    resolver::config::{NameServerConfigGroup, ResolverOpts},
     authority::{Catalog, ZoneType},
 };
 use tracing::error;
@@ -89,10 +89,11 @@ impl Handler {
             name_servers.merge(NameServerConfigGroup::google());
         }
 
-        let forward_options = None;
+        let mut resolver_options = ResolverOpts::default();
+        resolver_options.preserve_intermediates = true;
         return ForwardConfig{
                 name_servers,
-                options: forward_options
+                options: Some(resolver_options),
             }
     }
 
@@ -125,7 +126,8 @@ impl Handler {
             return Err(DnsError::InvalidMessageType(request.message_type()));
         }
         // TODO: Make vpn authority and create chain with Catalog<vpn_authority> and Catalog<ForwardAuthority>
-        Ok(self.forwarder.handle_request(request, response).await)
+        Ok(self.resolver.handle_request(request, response).await)
+        // Ok(self.forwarder.handle_request(request, response).await)
         // return Err(DnsError::InvalidMessageType(request.message_type()));
     }
 }

@@ -91,6 +91,7 @@ async fn main() -> Result<(), Box<dyn error::Error>> {
         }
     };
 
+    // It's for memory usage tests
     //use tokio::time::{sleep, Duration};
     // println!("!!!! > Sleeep...");
     // sleep(Duration::from_secs(10)).await;

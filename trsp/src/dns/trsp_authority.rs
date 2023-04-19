@@ -36,7 +36,7 @@ impl TrspAuthority {
 
     pub fn new(domains: TDomainsSet, forward_config: &ForwardConfig) -> Result<Self, Box<dyn Error>> {
         let resolver = TrspAuthority::create_resolver(forward_config)?;
-        let mut this = Self {
+        let this = Self {
             origin: LowerName::from_str(".").unwrap(),
             domains,
             inner: RwLock::new(InnerInMemory::default()),
@@ -106,7 +106,6 @@ impl Authority for TrspAuthority {
         debug!("forwarding lookup: {} {}", name, rtype);
         let name: LowerName = name.clone();
         let resolve = self.resolver.lookup(name, rtype).await;
-
         resolve.map(ForwardLookup).map_err(LookupError::from)
     }
 
