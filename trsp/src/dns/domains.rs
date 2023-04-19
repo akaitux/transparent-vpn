@@ -166,6 +166,7 @@ impl Domains {
         write_to: &PathBuf
     ) -> Result<(), Box<dyn Error>>
     {
+        // Write to file 100 domains per operation
         let mut file = File::create(write_to).await?;
         let mut buf: Vec<String> = Vec::with_capacity(100);
         for domain in domains {
@@ -210,6 +211,7 @@ impl Domains {
     -> Result<(), Box<dyn Error>>
     {
         let url: &Url;
+
         if let Some(u) = &self.domains_url {
             url = u;
         } else {

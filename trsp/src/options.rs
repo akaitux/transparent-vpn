@@ -1,15 +1,13 @@
 use clap::Parser;
 use std::net::SocketAddr;
 
-// TODO: Переделать как здесь https://github.com/sharkdp/bat/blob/master/src/bin/bat/app.rs
-
 #[derive(Parser, Debug, Clone)]
 pub struct Options {
     #[clap(short = 'd', long = "debug", action, env = "TRSP_DEBUG")]
     pub debug: bool,
+
     #[clap(short = 'w', long = "workdir", default_value="", env = "TRSP_WORKDIR")]
     pub workdir: String,
-
 
     // DNS
     #[clap(

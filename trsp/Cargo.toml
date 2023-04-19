@@ -24,7 +24,7 @@ reqwest = {version = "0.11", features = ["stream"]}
 futures-util = { version = "0.3.5", default-features = false, features = ["std"] }
 
 [dependencies.clap]
-version = "4.0"
+version = "4.2.3"
 features = ["derive", "env"]
 
 [dependencies.poem]
@@ -33,7 +33,8 @@ features = ["cookie", "csrf", "embed", "session"]
 
 [dependencies.trust-dns-server]
 version="0.22"
-features = ["trust-dns-resolver", "dns-over-https-rustls"]
+features = ["trust-dns-resolver", "dns-over-https-rustls", ]
+
 
 [build-dependencies]
 npm_rs = "0.2"

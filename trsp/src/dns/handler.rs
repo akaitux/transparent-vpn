@@ -13,10 +13,11 @@ use tracing::error;
 
 use super::domains_set::TDomainsSet;
 use super::trsp_authority::TrspAuthority;
+use std::error::Error;
 
 
 #[derive(thiserror::Error, Debug)]
-pub enum Error {
+pub enum DnsError {
     #[error("Invalid OpCode {0:}")]
     InvalidOpCode(OpCode),
     #[error("Invalid MessageType {0:}")]
@@ -37,13 +38,14 @@ pub struct Handler {
 }
 
 impl Handler {
-    pub fn new(options: &Options, domains: TDomainsSet) -> Self {
+    pub fn new(options: &Options, domains: TDomainsSet) -> Result<Self, Box<dyn Error>> {
         // https://github.com/bluejekyll/trust-dns/blob/main/crates/resolver/src/config.rs
-        Handler {
+        let resolver = Self::create_resolver(options, domains.clone())?;
+        Ok(Handler {
             domains,
             forwarder: Self::create_forwarder(options),
-            resolver: Self::create_resolver(options, domains),
-        }
+            resolver,
+        })
     }
 
     fn add_resolvers(
@@ -62,17 +64,17 @@ impl Handler {
         }
     }
 
-    fn create_resolver(options: &Options, domains: TDomainsSet) -> Catalog {
-        let trsp_authority = TrspAuthority::new(domains);
+    fn create_resolver(options: &Options, domains: TDomainsSet) -> Result<Catalog, Box<dyn Error>> {
+        let trsp_authority = TrspAuthority::new(domains, &Handler::create_forwarder_config(options))?;
         let mut catalog = Catalog::new();
         catalog.upsert(
             LowerName::new(&Name::root()),
             Box::new(Arc::new(trsp_authority)),
         );
-        return catalog
+        return Ok(catalog)
     }
 
-    fn create_forwarder(options: &Options) -> Catalog {
+    fn create_forwarder_config(options: &Options) -> ForwardConfig {
         let mut name_servers: NameServerConfigGroup = NameServerConfigGroup::new();
         let name_servers_ref = &mut name_servers;
 
@@ -88,13 +90,18 @@ impl Handler {
         }
 
         let forward_options = None;
-        let forward_authority = ForwardAuthority::try_from_config(
-            Name::root(),
-            ZoneType::Forward,
-            &ForwardConfig{
+        return ForwardConfig{
                 name_servers,
                 options: forward_options
             }
+    }
+
+    fn create_forwarder(options: &Options) -> Catalog {
+        let forward_config = Handler::create_forwarder_config(options);
+        let forward_authority = ForwardAuthority::try_from_config(
+            Name::root(),
+            ZoneType::Forward,
+            &forward_config,
         ).expect("Error while creating forwarder for DNS handler");
 
         let mut catalog = Catalog::new();
@@ -109,17 +116,17 @@ impl Handler {
         &self,
         request: &Request,
         response: R,
-    ) -> Result<ResponseInfo, Error> {
+    ) -> Result<ResponseInfo, DnsError> {
         // TODO: return error to client immediately
         if request.op_code() != OpCode::Query {
-            return Err(Error::InvalidOpCode(request.op_code()))
+            return Err(DnsError::InvalidOpCode(request.op_code()))
         }
         if request.message_type() != MessageType::Query {
-            return Err(Error::InvalidMessageType(request.message_type()));
+            return Err(DnsError::InvalidMessageType(request.message_type()));
         }
         // TODO: Make vpn authority and create chain with Catalog<vpn_authority> and Catalog<ForwardAuthority>
         Ok(self.forwarder.handle_request(request, response).await)
-        // return Err(Error::InvalidMessageType(request.message_type()));
+        // return Err(DnsError::InvalidMessageType(request.message_type()));
     }
 }
 
@@ -129,7 +136,7 @@ impl RequestHandler for Handler {
     async fn handle_request<R: ResponseHandler>(
         &self,
         request: &Request,
-        mut response: R,
+        response: R,
     ) -> ResponseInfo {
         match self.do_handle_request(request, response).await {
             Ok(info) => info,

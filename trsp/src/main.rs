@@ -8,7 +8,6 @@ use std::error;
 use std::env;
 use std::fs;
 use std::path::PathBuf;
-use std::str::FromStr;
 
 use std::error::Error;
 
@@ -76,6 +75,7 @@ async fn main() -> Result<(), Box<dyn error::Error>> {
     let options = options::Options::parse();
 
     setup_logger(&options);
+
     let workdir = match setup_workdir(&options) {
         Ok(workdir) => workdir,
         Err(err) => panic!("Error while setup workdir: {}", err),
@@ -90,11 +90,12 @@ async fn main() -> Result<(), Box<dyn error::Error>> {
             std::process::exit(1);
         }
     };
-    use tokio::time::{sleep, Duration};
 
-    println!("!!!! > Sleeep...");
-    sleep(Duration::from_secs(10)).await;
-    println!("!!!! > Wakeup!...");
+    //use tokio::time::{sleep, Duration};
+    // println!("!!!! > Sleeep...");
+    // sleep(Duration::from_secs(10)).await;
+    // println!("!!!! > Wakeup!...");
+
     dns_server.update_blocked_domains().await?;
 
     let web_server = web_server::server::WebServer::new(&options);

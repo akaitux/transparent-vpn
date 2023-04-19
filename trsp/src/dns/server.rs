@@ -8,21 +8,19 @@ use std::{error::Error, path::PathBuf, sync::{Arc, RwLock}};
 use std::time::Duration;
 use trust_dns_server::{
     server::ServerFuture,
-    client::rr::{RrKey, RecordSet, Name, LowerName},
-    proto::rr::RecordType,
     proto::error::ProtoError,
 };
 use reqwest::Url;
 use std::str::FromStr;
 
-use super::domains::{Domains, get_blocked_domains};
+use super::{domains::{Domains, get_blocked_domains}, domains_set::TDomainsSet};
 use super::domains_set::DomainsSet;
 
 
 pub struct DnsServer<'a> {
     options: &'a Options,
     workdir: &'a PathBuf,
-    domains: Option<Arc<RwLock<DomainsSet>>>,
+    domains: Option<TDomainsSet>,
 }
 
 impl<'a> DnsServer<'a> {
@@ -34,7 +32,7 @@ impl<'a> DnsServer<'a> {
         }
     }
 
-    async fn get_blocked_domains(&self) -> Result<Domains, Box<dyn Error>>{
+    async fn get_blocked_domains(&self) -> Result<Domains, Box<dyn Error>> {
         let domains_csv_url = Url::from_str(
             self.options.dns_blocked_domains_csv.as_str()
         )?;
@@ -71,8 +69,7 @@ impl<'a> DnsServer<'a> {
         let domains = Arc::new(RwLock::new(self.get_domains_set().await?));
         self.domains = Some(domains.clone());
 
-        let mut handler = Handler::new(&self.options, domains);
-        // handler.domains = Some(domains.clone());
+        let handler = Handler::new(&self.options, domains)?;
 
         let mut server = ServerFuture::new(handler);
 
