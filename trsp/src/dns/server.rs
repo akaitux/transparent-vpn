@@ -42,9 +42,9 @@ impl<'a> DnsServer<'a> {
         return Ok(domains_set)
     }
 
-    async fn get_records(&self) -> Result<(), Box<dyn Error>> {
-        todo!()
-    }
+    // async fn get_records(&self) -> Result<(), Box<dyn Error>> {
+    //     todo!()
+    // }
 
     pub async fn start(&mut self)
         -> Result<JoinHandle<Result<(), ProtoError>>, Box<dyn Error>>
@@ -78,12 +78,12 @@ impl<'a> DnsServer<'a> {
         Ok(dns_join)
     }
 
-    pub async fn import_domains(&mut self) -> Result<(), Box<dyn Error>> {
-        if let Some(s) = &self.domains_set {
-            let domains_set = Arc::clone(&s);
-            domains_set.import_domains().await?
-        }
-        return Ok(())
-    }
+    // pub async fn import_domains(&mut self) -> Result<(), Box<dyn Error>> {
+    //     if let Some(s) = &self.domains_set {
+    //         let domains_set = Arc::clone(&s);
+    //         domains_set.import_domains().await?
+    //     }
+    //     return Ok(())
+    // }
 }
 
