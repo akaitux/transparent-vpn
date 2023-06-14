@@ -1,4 +1,4 @@
-use std::{net::SocketAddr, sync::{RwLock, Arc}};
+use std::{net::SocketAddr, sync::Arc};
 
 use crate::options::Options;
 use trust_dns_server::{
@@ -11,7 +11,7 @@ use trust_dns_server::{
 };
 use tracing::error;
 
-use super::domains_set::TDomainsSet;
+use super::domains_set::ArcDomainsSet;
 use super::trsp_authority::TrspAuthority;
 use std::error::Error;
 
@@ -29,16 +29,15 @@ pub enum DnsError {
 }
 
 
-
-
 pub struct Handler {
-    pub domains: TDomainsSet,
+    pub domains: ArcDomainsSet,
     forwarder: Catalog,
     resolver: Catalog,
 }
 
+
 impl Handler {
-    pub fn new(options: &Options, domains: TDomainsSet) -> Result<Self, Box<dyn Error>> {
+    pub fn new(options: &Options, domains: ArcDomainsSet) -> Result<Self, Box<dyn Error>> {
         // https://github.com/bluejekyll/trust-dns/blob/main/crates/resolver/src/config.rs
         let resolver = Self::create_resolver(options, domains.clone())?;
         Ok(Handler {
@@ -64,7 +63,7 @@ impl Handler {
         }
     }
 
-    fn create_resolver(options: &Options, domains: TDomainsSet) -> Result<Catalog, Box<dyn Error>> {
+    fn create_resolver(options: &Options, domains: ArcDomainsSet) -> Result<Catalog, Box<dyn Error>> {
         let trsp_authority = TrspAuthority::new(domains, &Handler::create_forwarder_config(options))?;
         let mut catalog = Catalog::new();
         catalog.upsert(

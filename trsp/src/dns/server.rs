@@ -4,7 +4,7 @@ use tokio::{
     task::JoinHandle,
     net::{TcpListener, UdpSocket},
 };
-use std::{error::Error, path::PathBuf, sync::{Arc, RwLock}};
+use std::{error::Error, path::PathBuf, sync::Arc};
 use std::time::Duration;
 use trust_dns_server::{
     server::ServerFuture,
@@ -13,14 +13,13 @@ use trust_dns_server::{
 use reqwest::Url;
 use std::str::FromStr;
 
-use super::{domains::{Domains, get_blocked_domains}, domains_set::TDomainsSet};
-use super::domains_set::DomainsSet;
+use super::domains_set::{ArcDomainsSet, DomainsSet};
 
 
 pub struct DnsServer<'a> {
     options: &'a Options,
     workdir: &'a PathBuf,
-    domains: Option<TDomainsSet>,
+    domains_set: Option<ArcDomainsSet>,
 }
 
 impl<'a> DnsServer<'a> {
@@ -28,34 +27,18 @@ impl<'a> DnsServer<'a> {
         Self {
             options,
             workdir,
-            domains: None,
+            domains_set: None,
         }
     }
 
-    async fn get_blocked_domains(&self) -> Result<Domains, Box<dyn Error>> {
-        let domains_csv_url = Url::from_str(
-            self.options.dns_blocked_domains_csv.as_str()
-        )?;
-
-        let mut nxdomains_txt_url: Option<Url> = None;
-        if self.options.dns_use_nxdomains {
-            if ! self.options.dns_blocked_nxdomains_txt.is_empty() {
-                nxdomains_txt_url = Some(Url::from_str(
-                    self.options.dns_blocked_nxdomains_txt.as_str()
-                )?);
-            }
-        }
-        let blocked_domains = get_blocked_domains(
-            &domains_csv_url,
-            &nxdomains_txt_url,
-            self.workdir,
-        ).await?;
-        Ok(blocked_domains)
-    }
-
-    async fn get_domains_set(&self) -> Result<DomainsSet, Box<dyn Error>> {
-        let mut domains_set = DomainsSet::new(Some(self.workdir));
-        domains_set.blocked_domains = self.get_blocked_domains().await?;
+    fn create_domains_set(&self) -> Result<DomainsSet, Box<dyn Error>> {
+        let mut domains_set = DomainsSet::new(self.workdir);
+        domains_set.zapret_domains_csv_url = Some(Url::from_str(
+            self.options.dns_zapret_blocked_domains_csv.as_str()
+        )?);
+        domains_set.zapret_nxdomains_txt_url = Some(Url::from_str(
+            self.options.dns_zapret_blocked_nxdomains_txt.as_str()
+        )?);
         return Ok(domains_set)
     }
 
@@ -66,10 +49,12 @@ impl<'a> DnsServer<'a> {
     pub async fn start(&mut self)
         -> Result<JoinHandle<Result<(), ProtoError>>, Box<dyn Error>>
     {
-        let domains = Arc::new(RwLock::new(self.get_domains_set().await?));
-        self.domains = Some(domains.clone());
+        let domains_set = Arc::new(self.create_domains_set()?);
+        self.domains_set = Some(domains_set.clone());
 
-        let handler = Handler::new(&self.options, domains)?;
+        domains_set.import_domains().await?;
+
+        let handler = Handler::new(&self.options, domains_set)?;
 
         let mut server = ServerFuture::new(handler);
 
@@ -93,11 +78,10 @@ impl<'a> DnsServer<'a> {
         Ok(dns_join)
     }
 
-    pub async fn update_blocked_domains(&mut self) -> Result<(), Box<dyn Error>> {
-        if let Some(domains) = &self.domains {
-            let arc = Arc::clone(&domains);
-            let mut domains = arc.write().unwrap();
-            domains.update_blocked_domains().await?
+    pub async fn import_domains(&mut self) -> Result<(), Box<dyn Error>> {
+        if let Some(s) = &self.domains_set {
+            let domains_set = Arc::clone(&s);
+            domains_set.import_domains().await?
         }
         return Ok(())
     }

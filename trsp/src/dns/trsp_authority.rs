@@ -22,19 +22,19 @@ use trust_dns_server::{
 };
 
 use std::error::Error;
-use super::{domains_set::TDomainsSet, inner_in_memory::InnerInMemory};
+use super::{domains_set::ArcDomainsSet, inner_in_memory::InnerInMemory};
 
 
 pub struct TrspAuthority {
     origin: LowerName,
-    domains: TDomainsSet,
+    domains: ArcDomainsSet,
     inner: RwLock<InnerInMemory>,
     resolver: TokioAsyncResolver,
 }
 
 impl TrspAuthority {
 
-    pub fn new(domains: TDomainsSet, forward_config: &ForwardConfig) -> Result<Self, Box<dyn Error>> {
+    pub fn new(domains: ArcDomainsSet, forward_config: &ForwardConfig) -> Result<Self, Box<dyn Error>> {
         let resolver = TrspAuthority::create_resolver(forward_config)?;
         let this = Self {
             origin: LowerName::from_str(".").unwrap(),
