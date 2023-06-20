@@ -15,11 +15,17 @@ use crate::dns::trr_key::TRrKey;
 
 
 #[derive(Default)]
-pub struct InnerInMemory {
+pub struct InnerStorage {
     records: BTreeMap<TRrKey, Arc<RecordSet>>,
 }
 
-impl InnerInMemory {
+impl InnerStorage {
+
+    pub fn new() -> Self {
+        Self {
+            records: BTreeMap::new()
+        }
+    }
 
     fn inner_lookup(
         &self,

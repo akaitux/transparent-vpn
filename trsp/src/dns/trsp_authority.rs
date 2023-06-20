@@ -3,9 +3,8 @@ use std::{
     str::FromStr,
 };
 
-use tracing::{debug, warn};
+use tracing::{debug, warn, error};
 
-use tokio::sync::RwLock;
 
 use trust_dns_server::{
     authority::{
@@ -18,34 +17,41 @@ use trust_dns_server::{
     },
     server::RequestInfo,
     store::forwarder::{ForwardLookup, ForwardConfig},
-    resolver::{TokioAsyncResolver, config::ResolverConfig, TokioHandle},
+    resolver::{
+        TokioAsyncResolver,
+        config::ResolverConfig,
+        TokioHandle,
+        error::{ResolveError, ResolveErrorKind},
+    },
 };
 
 use std::error::Error;
-use super::{domains_set::ArcDomainsSet, inner_in_memory::InnerInMemory};
+use super::{domains_set::ArcDomainsSet, trsp_resolver::TrspResolver};
 
 
 pub struct TrspAuthority {
     origin: LowerName,
     domains: ArcDomainsSet,
-    inner: RwLock<InnerInMemory>,
-    resolver: TokioAsyncResolver,
+    resolver: TrspResolver,
+    forwarder: TokioAsyncResolver,
 }
 
 impl TrspAuthority {
 
     pub fn new(domains: ArcDomainsSet, forward_config: &ForwardConfig) -> Result<Self, Box<dyn Error>> {
-        let resolver = TrspAuthority::create_resolver(forward_config)?;
+        //let resolver = TrspAuthority::create_resolver(forward_config)?;
+        let resolver = TrspAuthority::create_resolver()?;
+        let forwarder = TrspAuthority::create_forward_resolver(forward_config)?;
         let this = Self {
             origin: LowerName::from_str(".").unwrap(),
             domains,
-            inner: RwLock::new(InnerInMemory::default()),
             resolver,
+            forwarder,
         };
         Ok(this)
     }
 
-    fn create_resolver(forward_config: &ForwardConfig) -> Result<TokioAsyncResolver, Box<dyn Error>> {
+    fn create_forward_resolver(forward_config: &ForwardConfig) -> Result<TokioAsyncResolver, Box<dyn Error>> {
         let name_servers = forward_config.name_servers.clone();
         let mut options = forward_config.options.unwrap_or_default();
 
@@ -62,6 +68,10 @@ impl TrspAuthority {
             .map_err(|e| format!("error constructing new Resolver: {}", e))?;
 
         return Ok(resolver)
+    }
+
+    fn create_resolver() -> Result<TrspResolver, Box<dyn Error>> {
+        TrspResolver::new()
     }
 }
 
@@ -104,8 +114,19 @@ impl Authority for TrspAuthority {
         debug_assert!(self.origin.zone_of(name));
 
         debug!("forwarding lookup: {} {}", name, rtype);
-        let name: LowerName = name.clone();
-        let resolve = self.resolver.lookup(name, rtype).await;
+        let mut resolve = self.resolver.lookup(name.clone(), rtype).await;
+        if let Err(e) = resolve {
+            match e.kind() {
+                 ResolveErrorKind::Message("Not Found") => {
+                    debug!("Not found '{}' {}' in internal storage", rtype, name)
+                }
+                _ => {
+                    error!("Error while resolving with internal storage: {}", e)
+                }
+            }
+            resolve = self.forwarder.lookup(name.clone(), rtype).await;
+        };
+        //let forward_resolver = self.forwarder.lookup(name.clone(), rtype).await;
         resolve.map(ForwardLookup).map_err(LookupError::from)
     }
 
