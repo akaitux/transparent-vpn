@@ -8,7 +8,7 @@ use tracing::warn;
 
 use trust_dns_server::{
     authority::LookupOptions,
-    client::rr::{DNSClass, LowerName, Record, RecordSet, RecordType},
+    client::rr::{DNSClass, LowerName, Record, RecordSet, RecordType}, resolver::IntoName,
 };
 
 use crate::dns::trr_key::TRrKey;
@@ -25,6 +25,10 @@ impl InnerStorage {
         Self {
             records: BTreeMap::new()
         }
+    }
+
+    pub fn find<N: IntoName>(&self, name: N, rtype: RecordType) -> Option<Arc<RecordSet>> {
+        None
     }
 
     fn inner_lookup(

@@ -27,6 +27,12 @@ impl TrspResolver {
     pub async fn lookup<N>(&self, name: N, rtype: RecordType) -> Result<Lookup, ResolveError>
         where N: IntoName
     {
-        Err(ResolveError::from("Not Found"))
+        let storage = self.inner_storage.read().await;
+        let record = storage.find(name, rtype);
+        drop(storage);
+        if record.is_none() {
+            return Err(ResolveError::from("Not Found"))
+        }
+        return Err(ResolveError::from("Internal Error"))
     }
 }
