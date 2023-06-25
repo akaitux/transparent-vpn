@@ -1,9 +1,10 @@
 use std::{
     io,
-    str::FromStr,
+    str::FromStr, collections::HashMap, sync::RwLock,
 };
 
 use ipnet::Ipv4Net;
+use tokio::time::Instant;
 use tracing::{debug, warn, error};
 
 
@@ -19,6 +20,7 @@ use trust_dns_server::{
     server::RequestInfo,
     store::forwarder::{ForwardLookup, ForwardConfig},
     resolver::{
+        lookup::Lookup,
         TokioAsyncResolver,
         config::ResolverConfig,
         TokioHandle,
@@ -30,17 +32,29 @@ use std::error::Error;
 use super::{domains_set::ArcDomainsSet, trsp_resolver::TrspResolver};
 
 
+//const FORWARDER_CACHE_SIZE: usize = 1000;
+//const FORWARDER_CACHE_MAX_TTL: usize = 5;
+
+
+//struct ForwarderCacheRecord {
+//    pub lookup: Lookup,
+//    pub resolved_at: Instant,
+//
+//}
+
+
 pub struct TrspAuthority {
     origin: LowerName,
-    domains: ArcDomainsSet,
+    domains_set: ArcDomainsSet,
     resolver: TrspResolver,
     forwarder: TokioAsyncResolver,
+    //forwarder_cache: RwLock<HashMap<LowerName, ForwarderCacheRecord>>,
 }
 
 impl TrspAuthority {
 
     pub fn new(
-        blocked_domains_set: ArcDomainsSet,
+        domains_set: ArcDomainsSet,
         forward_config: &ForwardConfig,
         mapping_ipv4_subnet: &Ipv4Net,
     ) -> Result<Self, Box<dyn Error>>
@@ -50,12 +64,14 @@ impl TrspAuthority {
         let forwarder = TrspAuthority::create_forward_resolver(forward_config)?;
         let this = Self {
             origin: LowerName::from_str(".").unwrap(),
-            domains: blocked_domains_set,
+            domains_set,
             resolver,
             forwarder,
+            //forwarder_cache: RwLock::new(HashMap::with_capacity(FORWARDER_CACHE_SIZE)),
         };
         Ok(this)
     }
+
 
     fn create_forward_resolver(forward_config: &ForwardConfig) -> Result<TokioAsyncResolver, Box<dyn Error>> {
         let name_servers = forward_config.name_servers.clone();
@@ -120,19 +136,38 @@ impl Authority for TrspAuthority {
         debug_assert!(self.origin.zone_of(name));
 
         debug!("forwarding lookup: {} {}", name, rtype);
-        let mut resolve = self.resolver.lookup(name.clone(), rtype).await;
-        if let Err(e) = resolve {
+        let mapping_resolve = self.resolver.lookup(name.clone(), rtype).await;
+        let resolve = if let Err(e) = mapping_resolve {
             match e.kind() {
                  ResolveErrorKind::Message("Not Found") => {
-                    debug!("Not found '{}' {}' in internal storage", rtype, name)
+                    debug!("Not found '{}' {}' in internal storage", rtype, name);
+                    if self.domains_set.is_domain_blocked(name.to_string().as_ref()) {
+                        self.resolver.add_blocked_domain(name.clone(), rtype).await
+                    } else {
+                        self.forwarder.lookup(name.clone(), rtype).await
+                    }
+
                 }
                 _ => {
-                    error!("Error while resolving with internal storage: {}", e)
+                    error!("Error while resolving with internal storage: {}", e);
+                    self.forwarder.lookup(name.clone(), rtype).await
                 }
             }
-            resolve = self.forwarder.lookup(name.clone(), rtype).await;
+            // Add forwarder record to cache
+            //if let Ok(l) = resolve {
+            //    self.forwarder_cache.write().unwrap().insert(
+            //        name.clone(),
+            //        ForwarderCacheRecord {
+            //            lookup: l,
+            //            resolved_at: Instant::now(),
+
+            //        }
+            //    );
+            //}
+        } else {
+            mapping_resolve
         };
-        //let forward_resolver = self.forwarder.lookup(name.clone(), rtype).await;
+
         resolve.map(ForwardLookup).map_err(LookupError::from)
     }
 

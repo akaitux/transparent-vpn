@@ -36,14 +36,30 @@ pub struct DomainsSet {
 
 impl DomainsSet {
     pub fn new(workdir: &PathBuf) -> Self {
-        return DomainsSet {
+        let d = DomainsSet {
             included_domains: RwLock::new(Domains::new(None)),
             excluded_domains: RwLock::new(Domains::new(None)),
             imported_domains: RwLock::new(Domains::new(None)),
             workdir: workdir.clone(),
             zapret_domains_csv_url: None,
             zapret_nxdomains_txt_url: None,
+        };
+        d.included_domains.write().unwrap().insert(Domain::new("meduza.io"));
+        d
+    }
+
+    pub fn is_domain_blocked(&self, name: &str) -> bool {
+        let name = name.trim_end_matches(".");
+        if let Some(_) = self.excluded_domains.read().unwrap().get(name) {
+            return false
         }
+        if let Some(_) = self.included_domains.read().unwrap().get(name) {
+            return true
+        }
+        if let Some(_) = self.imported_domains.read().unwrap().get(name) {
+            return true
+        }
+        false
     }
 
     pub async fn import_domains (
