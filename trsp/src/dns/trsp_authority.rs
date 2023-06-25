@@ -3,6 +3,7 @@ use std::{
     str::FromStr,
 };
 
+use ipnet::Ipv4Net;
 use tracing::{debug, warn, error};
 
 
@@ -38,13 +39,18 @@ pub struct TrspAuthority {
 
 impl TrspAuthority {
 
-    pub fn new(domains: ArcDomainsSet, forward_config: &ForwardConfig) -> Result<Self, Box<dyn Error>> {
+    pub fn new(
+        blocked_domains_set: ArcDomainsSet,
+        forward_config: &ForwardConfig,
+        mapping_ipv4_subnet: &Ipv4Net,
+    ) -> Result<Self, Box<dyn Error>>
+    {
         //let resolver = TrspAuthority::create_resolver(forward_config)?;
-        let resolver = TrspAuthority::create_resolver()?;
+        let resolver = TrspAuthority::create_resolver(&mapping_ipv4_subnet)?;
         let forwarder = TrspAuthority::create_forward_resolver(forward_config)?;
         let this = Self {
             origin: LowerName::from_str(".").unwrap(),
-            domains,
+            domains: blocked_domains_set,
             resolver,
             forwarder,
         };
@@ -70,8 +76,8 @@ impl TrspAuthority {
         return Ok(resolver)
     }
 
-    fn create_resolver() -> Result<TrspResolver, Box<dyn Error>> {
-        TrspResolver::new()
+    fn create_resolver(mapping_ipv4_subnet: &Ipv4Net) -> Result<TrspResolver, Box<dyn Error>> {
+        TrspResolver::new(mapping_ipv4_subnet)
     }
 }
 

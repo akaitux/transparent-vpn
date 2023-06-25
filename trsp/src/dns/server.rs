@@ -13,6 +13,8 @@ use trust_dns_server::{
 use reqwest::Url;
 use std::str::FromStr;
 
+use ipnet::Ipv4Net;
+
 use super::domains_set::{ArcDomainsSet, DomainsSet};
 
 

@@ -4,15 +4,18 @@ mod dns;
 mod web_server;
 
 use clap::Parser;
-use std::error;
-use std::env;
-use std::fs;
-use std::path::PathBuf;
+use std::{
+    error::Error,
+    process,
+    env,
+    fs,
+    path::PathBuf,
+};
 
-use std::error::Error;
 
 use tracing_subscriber::{filter, prelude::*};
-use tracing::info;
+use tracing::{info, error};
+
 
 
 fn setup_logger(opts: &options::Options) {
@@ -71,7 +74,7 @@ fn setup_workdir(opts: &options::Options) -> Result<PathBuf, Box<dyn Error>> {
 
 
 #[tokio::main]
-async fn main() -> Result<(), Box<dyn error::Error>> {
+async fn main() -> Result<(), Box<dyn Error>> {
     let options = options::Options::parse();
 
     setup_logger(&options);
@@ -80,6 +83,14 @@ async fn main() -> Result<(), Box<dyn error::Error>> {
         Ok(workdir) => workdir,
         Err(err) => panic!("Error while setup workdir: {}", err),
     };
+
+    // let mapping_subnet = match options.mapping_subnet.parse::<Ipv4Net>() {
+    //     Ok(s) => s,
+    //     Err(e) => {
+    //         error!("Error while parsing MAPPING_SUBNET: {}", e);
+    //         process::exit(1)
+    //     }
+    // };
 
     let dns_workdir = workdir.join("dns");
     let mut dns_server = dns::server::DnsServer::new(&options, &dns_workdir);

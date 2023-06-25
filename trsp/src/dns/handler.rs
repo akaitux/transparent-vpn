@@ -31,19 +31,18 @@ pub enum DnsError {
 
 pub struct Handler {
     pub domains: ArcDomainsSet,
-    forwarder: Catalog,
-    resolver: Catalog,
+    // forwarder_authority: Catalog,
+    trsp_authority: Catalog,
 }
 
 
 impl Handler {
     pub fn new(options: &Options, domains: ArcDomainsSet) -> Result<Self, Box<dyn Error>> {
         // https://github.com/bluejekyll/trust-dns/blob/main/crates/resolver/src/config.rs
-        let resolver = Self::create_resolver(options, domains.clone())?;
+        let trsp_authority = Self::create_trsp_authority(options, domains.clone())?;
         Ok(Handler {
             domains,
-            forwarder: Self::create_forwarder(options),
-            resolver,
+            trsp_authority,
         })
     }
 
@@ -63,8 +62,14 @@ impl Handler {
         }
     }
 
-    fn create_resolver(options: &Options, domains: ArcDomainsSet) -> Result<Catalog, Box<dyn Error>> {
-        let trsp_authority = TrspAuthority::new(domains, &Handler::create_forwarder_config(options))?;
+    fn create_trsp_authority(options: &Options, blocked_domains_set: ArcDomainsSet) -> Result<Catalog, Box<dyn Error>> {
+        let forwarder_config = &Handler::create_forwarder_config(options);
+
+        let trsp_authority = TrspAuthority::new(
+            blocked_domains_set,
+            forwarder_config,
+            &options.mapping_ipv4_subnet,
+        )?;
         let mut catalog = Catalog::new();
         catalog.upsert(
             LowerName::new(&Name::root()),
@@ -96,21 +101,6 @@ impl Handler {
             }
     }
 
-    fn create_forwarder(options: &Options) -> Catalog {
-        let forward_config = Handler::create_forwarder_config(options);
-        let forward_authority = ForwardAuthority::try_from_config(
-            Name::root(),
-            ZoneType::Forward,
-            &forward_config,
-        ).expect("Error while creating forwarder for DNS handler");
-
-        let mut catalog = Catalog::new();
-        catalog.upsert(
-            LowerName::new(&Name::root()),
-            Box::new(Arc::new(forward_authority))
-        );
-        return catalog
-    }
 
     async fn do_handle_request<R: ResponseHandler> (
         &self,
@@ -124,10 +114,8 @@ impl Handler {
         if request.message_type() != MessageType::Query {
             return Err(DnsError::InvalidMessageType(request.message_type()));
         }
-        // TODO: Make vpn authority and create chain with Catalog<vpn_authority> and Catalog<ForwardAuthority>
-        Ok(self.resolver.handle_request(request, response).await)
-        // Ok(self.forwarder.handle_request(request, response).await)
-        // return Err(DnsError::InvalidMessageType(request.message_type()));
+        // TODO: Зачем тут OK
+        Ok(self.trsp_authority.handle_request(request, response).await)
     }
 }
 

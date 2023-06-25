@@ -1,5 +1,6 @@
 use clap::Parser;
 use std::net::SocketAddr;
+use ipnet::Ipv4Net;
 
 #[derive(Parser, Debug, Clone)]
 pub struct Options {
@@ -82,6 +83,13 @@ pub struct Options {
         env = "TRSP_DNS_INCLUDED_DOMAINS_FILE")
     ]
     pub dns_included_domains_file: String,
+
+    #[clap(
+        long,
+        default_value = "10.224.128.0/17",
+        env = "MAPPING_IPV4_SUBNET")
+    ]
+    pub mapping_ipv4_subnet: Ipv4Net,
 
 
     // WEB

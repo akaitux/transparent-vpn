@@ -1,3 +1,4 @@
+use ipnet::Ipv4Net;
 use tokio::sync::RwLock;
 use thiserror;
 use std::{
@@ -18,9 +19,9 @@ pub struct TrspResolver {
 }
 
 impl TrspResolver {
-    pub fn new() -> Result<Self, Box<dyn Error>> {
+    pub fn new(mapping_ipv4_subnet: &Ipv4Net) -> Result<Self, Box<dyn Error>> {
         Ok(Self {
-            inner_storage: RwLock::new(InnerStorage::new())
+            inner_storage: RwLock::new(InnerStorage::new(mapping_ipv4_subnet.clone()))
         })
     }
 

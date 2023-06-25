@@ -1,45 +1,56 @@
 use std::{
-    collections::BTreeMap,
+    collections::{BTreeMap, HashSet},
     sync::Arc,
+    net::{IpAddr, Ipv4Addr, Ipv6Addr},
 };
 
+use ipnet::Ipv4Net;
 use tracing::warn;
 
 
 use trust_dns_server::{
     authority::LookupOptions,
-    client::rr::{DNSClass, LowerName, Record, RecordSet, RecordType}, resolver::IntoName,
+    client::rr::{DNSClass, LowerName, Record, RecordSet, RecordType, RrKey}, resolver::IntoName,
 };
 
-use crate::dns::trr_key::TRrKey;
+use std::cmp::Ordering;
+use tokio::time::Instant;
 
 
 #[derive(Default)]
 pub struct InnerStorage {
-    records: BTreeMap<TRrKey, Arc<RecordSet>>,
+    records: BTreeMap<RrKey, Arc<RecordSet>>,
+    mapping_ipv4_subnet: Ipv4Net,
+    available_ipv4_inner_ips: HashSet<Ipv4Addr>,
 }
 
 impl InnerStorage {
 
-    pub fn new() -> Self {
-        Self {
-            records: BTreeMap::new()
+    pub fn new(mapping_ipv4_subnet: Ipv4Net) -> Self {
+        let s = Self {
+            records: BTreeMap::new(),
+            mapping_ipv4_subnet,
+            available_ipv4_inner_ips: HashSet::from_iter(mapping_ipv4_subnet.hosts()),
+        };
+        for ip in s.available_ipv4_inner_ips.iter() {
+            println!("{}", ip);
         }
+        s
     }
 
     pub fn find<N: IntoName>(&self, name: N, rtype: RecordType) -> Option<Arc<RecordSet>> {
         None
     }
 
-    fn inner_lookup(
+    fn _inner_lookup(
         &self,
         name: &LowerName,
         record_type: RecordType,
         lookup_options: LookupOptions,
     ) -> Option<Arc<RecordSet>> {
         // this range covers all the records for any of the RecordTypes at a given label.
-        let start_range_key = TRrKey::new(name.clone(), RecordType::Unknown(u16::min_value()));
-        let end_range_key = TRrKey::new(name.clone(), RecordType::Unknown(u16::max_value()));
+        let start_range_key = RrKey::new(name.clone(), RecordType::Unknown(u16::min_value()));
+        let end_range_key = RrKey::new(name.clone(), RecordType::Unknown(u16::max_value()));
 
         fn aname_covers_type(key_type: RecordType, query_type: RecordType) -> bool {
             (query_type == RecordType::A || query_type == RecordType::AAAA)
@@ -77,7 +88,7 @@ impl InnerStorage {
     /// # Return value
     ///
     /// true if the value was inserted, false otherwise
-    fn upsert(&mut self, record: Record, serial: u32, dns_class: DNSClass) -> bool {
+    fn _upsert(&mut self, record: Record, serial: u32, dns_class: DNSClass) -> bool {
         if dns_class != record.dns_class() {
             warn!(
                 "mismatched dns_class on record insert, zone: {} record: {}",
@@ -107,8 +118,8 @@ impl InnerStorage {
 
         // check that CNAME and ANAME is either not already present, or no other records are if it's a CNAME
         let start_range_key =
-            TRrKey::new(record.name().into(), RecordType::Unknown(u16::min_value()));
-        let end_range_key = TRrKey::new(record.name().into(), RecordType::Unknown(u16::max_value()));
+            RrKey::new(record.name().into(), RecordType::Unknown(u16::min_value()));
+        let end_range_key = RrKey::new(record.name().into(), RecordType::Unknown(u16::max_value()));
 
         let multiple_records_at_label_disallowed = self
             .records
@@ -128,7 +139,7 @@ impl InnerStorage {
             return false;
         }
 
-        let rr_key = TRrKey::new(record.name().into(), record.rr_type());
+        let rr_key = RrKey::new(record.name().into(), record.rr_type());
         let records: &mut Arc<RecordSet> = self
             .records
             .entry(rr_key)
@@ -145,3 +156,21 @@ impl InnerStorage {
     }
 }
 
+
+//struct ProxyRecord {
+//    pub original: IpAddr,
+//    pub mapped: IpAddr,
+//}
+//
+//impl ProxyRecord {
+//    pub fn new(original: IpAddr) -> Self {
+//        Self {original, mapped: IpAddr::from_str("127.0.0.1")}
+//    }
+//}
+//
+//#[derive(Eq, PartialEq, Debug, Hash, Clone)]
+//struct ProxyRecordSet {
+//    pub records: Vec<ProxyRecord>,
+//    pub resolved_at: Option<Instant>,
+//}
+//

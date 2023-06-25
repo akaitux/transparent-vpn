@@ -2322,6 +2322,7 @@ dependencies = [
  "config",
  "encoding_rs",
  "futures-util",
+ "ipnet",
  "lazy_static",
  "npm_rs",
  "poem",
