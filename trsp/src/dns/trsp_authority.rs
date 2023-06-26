@@ -141,7 +141,7 @@ impl Authority for TrspAuthority {
             match e.kind() {
                  ResolveErrorKind::Message("Not Found") => {
                     debug!("Not found '{}' {}' in internal storage", rtype, name);
-                    if self.domains_set.is_domain_blocked(name.to_string().as_ref()) {
+                    if self.domains_set.is_domain_blocked(name.to_string().as_ref()).await {
                         self.resolver.add_blocked_domain(name.clone(), rtype).await
                     } else {
                         self.forwarder.lookup(name.clone(), rtype).await

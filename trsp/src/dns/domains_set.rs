@@ -1,8 +1,9 @@
 use std::error::Error;
 use std::path::PathBuf;
-use std::sync::{RwLock, Arc};
+use std::sync::Arc;
 use std::env;
 use std::time::Instant;
+use tokio::sync::RwLock;
 use tracing::{debug, info, error, warn};
 use tokio_stream::StreamExt;
 use reqwest::Url;
@@ -24,7 +25,6 @@ lazy_static! {
 
 pub type ArcDomainsSet = Arc<DomainsSet>;
 
-
 pub struct DomainsSet {
     pub included_domains: RwLock<Domains>,
     pub excluded_domains: RwLock<Domains>,
@@ -36,36 +36,67 @@ pub struct DomainsSet {
 
 impl DomainsSet {
     pub fn new(workdir: &PathBuf) -> Self {
-        let d = DomainsSet {
+        DomainsSet {
             included_domains: RwLock::new(Domains::new(None)),
             excluded_domains: RwLock::new(Domains::new(None)),
             imported_domains: RwLock::new(Domains::new(None)),
             workdir: workdir.clone(),
             zapret_domains_csv_url: None,
             zapret_nxdomains_txt_url: None,
-        };
-        d.included_domains.write().unwrap().insert(Domain::new("meduza.io"));
-        d
+        }
     }
 
-    pub fn is_domain_blocked(&self, name: &str) -> bool {
+    pub async fn is_domain_blocked(&self, name: &str) -> bool {
         let name = name.trim_end_matches(".");
-        if let Some(_) = self.excluded_domains.read().unwrap().get(name) {
+        if DomainsSet::is_domain_in_domains(name, &self.excluded_domains).await  {
             return false
         }
-        if let Some(_) = self.included_domains.read().unwrap().get(name) {
+        if DomainsSet::is_domain_in_domains(name, &self.included_domains).await  {
             return true
         }
-        if let Some(_) = self.imported_domains.read().unwrap().get(name) {
+        if DomainsSet::is_domain_in_domains(name, &self.imported_domains).await  {
             return true
         }
         false
     }
 
-    pub async fn import_domains (
-        &self,
-    ) -> Result<(), Box<dyn Error>>
-    {
+    pub async fn add_blocked_domain(&mut self, domain: &str) {
+        self.included_domains.write().await.insert(Domain::new(domain));
+        // TODO Write it to file
+    }
+
+    pub async fn add_excluded_domain(&mut self, domain: &str) {
+        self.excluded_domains.write().await.insert(Domain::new(domain));
+        // TODO Write it to file
+    }
+
+    fn reverse_domain(domain: &str) -> String {
+        let mut s = domain.split('.').rev().fold(String::new(), |acc, s| acc + s + ".");
+        s.pop();
+        s
+    }
+
+    async fn is_domain_in_domains(name: &str, domains: &RwLock<Domains>) -> bool {
+        let domains = domains.read().await;
+        if let Some(_) = domains.get(name) {
+            return true
+        }
+        let mut domain_incr = String::new();
+        let inversed_name = DomainsSet::reverse_domain(name);
+        for dpart in inversed_name.split(".") {
+            domain_incr = format!("{}.{}", domain_incr, dpart);
+            let search_string: String = format!(
+                "*.{}",
+                DomainsSet::reverse_domain(domain_incr.as_str()),
+            ).trim_end_matches(".").into();
+            if let Some(_) = domains.get(search_string.as_str()) {
+                return true
+            }
+        }
+        false
+    }
+
+    pub async fn import_domains(&self) -> Result<(), Box<dyn Error>> {
         let tmp_dir = env::temp_dir();
         debug!("Temp dir for downloads is {}", tmp_dir.as_path().as_display());
 
@@ -74,7 +105,7 @@ impl DomainsSet {
         let duration = start.elapsed();
         info!("Domains load time: {:?}", duration);
 
-        if let Some(u) = &self.zapret_nxdomains_txt_url {
+        if let Some(_) = &self.zapret_nxdomains_txt_url {
             let start = Instant::now();
             self.download_zapret_nxdomains().await?;
             let duration = start.elapsed();
@@ -102,7 +133,7 @@ impl DomainsSet {
                     "Load domains from cache file: {}",
                     &cache_filepath.as_path().as_display(),
                 );
-                return self.imported_domains.write().unwrap().read_from_file(&cache_filepath).await
+                return self.imported_domains.write().await.read_from_file(&cache_filepath).await
             }
         };
 
@@ -115,7 +146,7 @@ impl DomainsSet {
         let mut current_column: u8 = 1;
         let mut line_n: u64 = 0;
         let mut stream = response.bytes_stream();
-        let mut imported_domains = self.imported_domains.write().unwrap();
+        let mut imported_domains = self.imported_domains.write().await;
         while let Some(chunk) = stream.next().await {
             for byte in chunk? {
                 if byte == b';' {
@@ -170,13 +201,13 @@ impl DomainsSet {
                     "Load nxdomains from cache file: {}",
                     &cache_filepath.as_path().as_display()
                 );
-                return self.imported_domains.write().unwrap().read_from_file(&cache_filepath).await
+                return self.imported_domains.write().await.read_from_file(&cache_filepath).await
             }
         };
 
         let mut buf: Vec<u8> = Vec::with_capacity(100);
         let mut stream = response.bytes_stream();
-        let mut imported_domains = self.imported_domains.write().unwrap();
+        let mut imported_domains = self.imported_domains.write().await;
         while let Some(chunk) = stream.next().await {
             for byte in chunk? {
                 if byte == b'\n' {
@@ -251,3 +282,106 @@ fn prepare_domain_name(domain: &String) -> String {
 // }
 
 
+#[test]
+fn test_domains_set_reverse_domain() -> Result<(), String> {
+    fn compare(original: &str, reversed_req: &str) -> Result<String, String> {
+        let reversed = DomainsSet::reverse_domain(original);
+        let output = format!("orig: {}, req: {}, reversed: {}", original, reversed_req, reversed);
+        if reversed.as_str() != reversed_req {
+            return Err(output);
+        }
+        Ok(output)
+    }
+
+    let original = "mydomain.ru";
+    let reversed_req = "ru.mydomain";
+    if let Err(e) = compare(original, reversed_req) { return Err(e) }
+
+    let original = "*.mydomain.ru";
+    let reversed_req = "ru.mydomain.*";
+    if let Err(e) = compare(original, reversed_req) { return Err(e) }
+
+    let original = "*.mydomain.ru";
+    let reversed_req = "ru.mydomainblah.*";
+    if let Ok(o) = compare(original, reversed_req) { return Err(format!("Must returns false: {}", o)) }
+
+    Ok(())
+}
+
+#[tokio::test]
+async fn test_domains_set_is_domain_in_domains() -> Result<(), String> {
+    async fn check(blocked_domain: &str, requested_domain: &str, mode: &str) -> Result<(), String> {
+        let mut domains_set = DomainsSet::new(&PathBuf::new());
+        if mode == "blocked" {
+            domains_set.add_blocked_domain(blocked_domain).await;
+            if !domains_set.is_domain_blocked(requested_domain).await {
+                return Err(format!(
+                    "Domain '{}' is not blocked (blocked: {})",
+                    requested_domain, blocked_domain
+                ))
+            }
+        } else if mode == "excluded" {
+            domains_set.add_blocked_domain(blocked_domain).await;
+            domains_set.add_excluded_domain(blocked_domain).await;
+            if domains_set.is_domain_blocked(requested_domain).await {
+                return Err(format!(
+                    "Domain '{}' is blocked, but must be excluded (excluded: {})",
+                     requested_domain, blocked_domain,
+                ))
+            }
+        } else {
+            return Err(String::from("Unexpected mode"))
+        }
+
+        Ok(())
+    }
+
+    // Blocked
+    if let Err(e) = check("somedomain.ru", "somedomain.ru", "blocked").await {
+        return Err(e)
+    }
+
+    if let Ok(()) = check("somedomain.ru", "notsomedomain.ru", "blocked").await {
+        return Err("'notsomedomain.ru' blocked, but must be dont".into())
+    }
+
+    if let Err(e) = check("*.wildcard.ru", "wildcard.ru", "blocked").await {
+        return Err(e)
+    }
+
+    if let Ok(()) = check("*.wildcard.ru", "notwildcard.ru", "blocked").await {
+        return Err("'notwildcard.ru' blocked, but must be dont".into())
+    }
+
+    if let Err(e) = check("*.wildcard.ru", "some.wildcard.ru", "blocked").await {
+        return Err(e)
+    }
+
+    if let Err(e) = check("*.wildcard.ru", "another.some.wildcard.ru", "blocked").await {
+        return Err(e)
+    }
+
+
+
+    // Excluded
+    if let Err(e) = check("somedomain.ru", "somedomain.ru", "excluded").await {
+        return Err(e)
+    }
+    if let Err(e) = check("somedomain.ru", "notsomedomain.ru", "excluded").await {
+        return Err(format!("'notsomedomain.ru' not excluded, but must be: {}", e).into())
+    }
+
+    if let Err(e) = check("*.wildcard.ru", "wildcard.ru", "excluded").await {
+        return Err(e)
+    }
+
+    if let Err(e) = check("*.wildcard.ru", "some.wildcard.ru", "excluded").await {
+        return Err(e)
+    }
+
+    if let Err(e) = check("*.wildcard.ru", "another.some.wildcard.ru", "excluded").await {
+        return Err(e)
+    }
+
+    Ok(())
+}

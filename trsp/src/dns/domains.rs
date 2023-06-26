@@ -6,6 +6,7 @@ use tokio::{
     io::{AsyncWriteExt, AsyncBufReadExt, BufReader},
     fs::File,
 };
+use std::fmt::{self, Display};
 use std::ops::{Deref, DerefMut};
 
 
@@ -13,10 +14,16 @@ const DEFAULT_DOMAINS_HASHSET_CAP: usize = 2_000_000;
 const DEFAULT_NXDOMAINS_HASHSET_CAP: usize = 500_000;
 
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct Domain {
     domain: String,
     is_regex: bool
+}
+
+impl Display for Domain {
+     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{}", self.domain)
+    }
 }
 
 impl Hash for Domain {
@@ -45,11 +52,11 @@ impl Borrow<str> for Domain {
     }
 }
 
-impl ToString for Domain {
-    fn to_string(&self) -> String {
-        return self.domain.clone()
-    }
-}
+// impl ToString for Domain {
+//     fn to_string(&self) -> String {
+//         return self.domain.clone()
+//     }
+// }
 
 impl Domain {
     pub fn new<S: Into<String>>(domain: S) -> Self {
@@ -70,6 +77,7 @@ impl Domain {
 }
 
 
+#[derive(Debug)]
 pub struct Domains {
     domains: HashSet<Domain>,
 }

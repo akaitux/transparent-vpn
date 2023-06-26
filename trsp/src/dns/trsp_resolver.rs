@@ -52,6 +52,7 @@ impl TrspResolver {
     }
 
     pub async fn add_blocked_domain<N>(&self, name: N, rtype: RecordType) -> Result<Lookup, ResolveError> {
+        let storage = self.inner_storage.write().await;
         return Err(ResolveError::from("add_blocked_domain"))
     }
 }
