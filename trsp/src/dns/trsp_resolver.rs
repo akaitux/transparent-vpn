@@ -4,7 +4,7 @@ use thiserror;
 use std::{
     error::Error,
     fmt, sync::Arc,
-    time::Instant,
+    time::Instant, collections::HashSet, net::Ipv4Addr,
 };
 use super::inner_storage::InnerStorage;
 use trust_dns_server::{
@@ -18,12 +18,16 @@ use trust_dns_server::{
 
 pub struct TrspResolver {
     inner_storage: RwLock<InnerStorage>,
+    mapping_ipv4_subnet: Ipv4Net,
+    available_ipv4_inner_ips: HashSet<Ipv4Addr>,
 }
 
 impl TrspResolver {
     pub fn new(mapping_ipv4_subnet: &Ipv4Net) -> Result<Self, Box<dyn Error>> {
         Ok(Self {
-            inner_storage: RwLock::new(InnerStorage::new(mapping_ipv4_subnet))
+            inner_storage: RwLock::new(InnerStorage::new()),
+            mapping_ipv4_subnet: mapping_ipv4_subnet.clone(),
+            available_ipv4_inner_ips: HashSet::from_iter(mapping_ipv4_subnet.hosts()),
         })
     }
 

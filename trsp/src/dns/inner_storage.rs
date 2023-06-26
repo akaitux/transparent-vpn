@@ -17,21 +17,19 @@ use trust_dns_server::{
 use std::cmp::Ordering;
 use tokio::time::Instant;
 
+use super::proxy_record::ProxyRecordSet;
+
 
 #[derive(Default)]
 pub struct InnerStorage {
     records: HashMap<RrKey, Arc<ProxyRecordSet>>,
-    mapping_ipv4_subnet: Ipv4Net,
-    available_ipv4_inner_ips: HashSet<Ipv4Addr>,
 }
 
 impl InnerStorage {
 
-    pub fn new(mapping_ipv4_subnet: &Ipv4Net) -> Self {
+    pub fn new() -> Self {
         Self {
             records: HashMap::new(),
-            mapping_ipv4_subnet: mapping_ipv4_subnet.clone(),
-            available_ipv4_inner_ips: HashSet::from_iter(mapping_ipv4_subnet.hosts()),
         }
     }
 
@@ -150,44 +148,5 @@ impl InnerStorage {
     //        false
     //    }
     //}
-}
-
-
-#[derive(Eq, PartialEq, Debug, Hash, Clone)]
-pub struct ProxyRecord {
-    pub original_addr: IpAddr,
-    pub mapped_addr: IpAddr,
-}
-
-impl ProxyRecord {
-    pub fn new(original_addr: IpAddr, mapped_addr: IpAddr) -> Self {
-        Self {original_addr, mapped_addr}
-    }
-}
-
-#[derive(Eq, PartialEq, Debug, Hash, Clone)]
-pub struct ProxyRecordSet {
-    pub records: Vec<ProxyRecord>,
-    pub resolved_at: Option<Instant>,
-}
-
-impl ProxyRecordSet {
-
-    pub fn mapped_records(&self) -> Vec<Record> {
-        self.records.iter().map(|pr| {
-            let mut r = Record::new();
-            if let IpAddr::V4(ip) = pr.mapped_addr {
-                r.set_record_type(RecordType::A);
-                let rdata = RData::A(ip);
-                r.set_data(Some(rdata));
-            }
-            if let IpAddr::V6(ip) = pr.mapped_addr {
-                r.set_record_type(RecordType::AAAA);
-                let rdata = RData::AAAA(ip);
-                r.set_data(Some(rdata));
-            }
-            r
-        }).collect()
-    }
 }
 
