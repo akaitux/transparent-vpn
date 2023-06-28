@@ -165,13 +165,12 @@ impl TrspAuthority {
         drop(inner_storage);
 
         let lookup = self.forwarder.lookup(name, rtype).await?;
-        let lookup_time = Instant::now();
-        let mut records_set = ProxyRecordSet::new();
+        let mut records_set = ProxyRecordSet::new(Instant::now());
         let mut inner_storage = self.inner_storage.write().await;
         let mut available_ipv4s = self.available_ipv4_inner_ips.write().await;
         for record in lookup.records() {
-            info!("{:?}", records_set);
-            info!("{:?}", available_ipv4s.range(..10));
+            debug!("{:?}", records_set);
+            debug!("{:?}", available_ipv4s.range(..10));
             if record.rr_type() != RecordType::A  {
                 info!(
                     "Domain record is not A, continue: {} ; {}",
@@ -216,10 +215,15 @@ impl TrspAuthority {
                 "Error while adding ProxyRecordSet to inner storage for domain '{}': {}",
                 name, e
             );
+            for record in records_set.records {
+                match record.mapped_addr {
+                    IpAddr::V4(a) => available_ipv4s.push_front(a),
+                    _ => {}
+                }
+            }
             return Err(ResolveError::from("error_while_push_records_set"))
         }
         Ok(self.build_lookup(name, rtype, &records_set))
-        //return Err(ResolveError::from("add_blocked_domain"))
     }
 }
 

@@ -1,9 +1,9 @@
 use std::{
     net::IpAddr,
     error::Error,
+    time::Instant,
 };
 
-use tokio::time::Instant;
 use trust_dns_server::proto::rr::{Record, RecordType, RData};
 
 #[derive(Eq, PartialEq, Debug, Hash, Clone)]
@@ -22,15 +22,15 @@ impl ProxyRecord {
 #[derive(Eq, PartialEq, Debug, Hash, Clone)]
 pub struct ProxyRecordSet {
     pub records: Vec<ProxyRecord>,
-    pub resolved_at: Option<Instant>,
+    pub resolved_at: Instant,
 }
 
 impl ProxyRecordSet {
 
-    pub fn new() -> Self {
+    pub fn new(lookup_time: Instant) -> Self {
         Self {
             records: vec![],
-            resolved_at: None,
+            resolved_at: lookup_time,
         }
     }
 
