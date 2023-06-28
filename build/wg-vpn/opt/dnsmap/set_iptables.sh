@@ -1,4 +1,5 @@
 #!/bin/bash
+exit 0
 # ./set_iptables.sh REAL_ADDR FAKE_ADDR
 real_addr="$1"
 fake_addr="$2"
