@@ -40,8 +40,18 @@ impl InnerStorage {
         self.inner_lookup(name, rtype)
     }
 
-    pub fn upsert(&self, name: &LowerName, rtype: RecordType) -> Result<Arc<ProxyRecordSet>, Box<dyn Error>> {
-        return Err("todo".into())
+    pub fn upsert(
+        &mut self,
+        name: &LowerName,
+        rtype: RecordType,
+        records_set: &ProxyRecordSet
+    ) -> Result<Arc<ProxyRecordSet>, Box<dyn Error>> {
+        let records_set = Arc::from(records_set.clone());
+        self.records.insert(
+            RrKey::new(name.clone(), rtype.clone()),
+            records_set.clone(),
+        );
+        Ok(records_set)
     }
 
     fn inner_lookup(

@@ -167,9 +167,11 @@ impl TrspAuthority {
         let lookup = self.forwarder.lookup(name, rtype).await?;
         let lookup_time = Instant::now();
         let mut records_set = ProxyRecordSet::new();
-        let inner_storage = self.inner_storage.write().await;
+        let mut inner_storage = self.inner_storage.write().await;
         let mut available_ipv4s = self.available_ipv4_inner_ips.write().await;
         for record in lookup.records() {
+            info!("{:?}", records_set);
+            info!("{:?}", available_ipv4s.range(..10));
             if record.rr_type() != RecordType::A  {
                 info!(
                     "Domain record is not A, continue: {} ; {}",
@@ -182,7 +184,7 @@ impl TrspAuthority {
                 continue
 
             }
-            let mapped_ip: IpAddr = if let Some(ip) = available_ipv4s.pop_front() {
+            let mapped_ip: Ipv4Addr = if let Some(ip) = available_ipv4s.pop_front() {
                 ip.into()
             } else {
                 error!("Mapped ip set is empty");
@@ -192,11 +194,12 @@ impl TrspAuthority {
                 ip
             } else {
                 info!("Something wrong, record not contains ip: {} ; {:?}", name, record.data());
+                available_ipv4s.push_front(mapped_ip);
                 continue
             };
             let proxy_record = ProxyRecord::new(
                 ip_addr,
-                mapped_ip,
+                mapped_ip.into(),
             );
 
             if let Err(e) = records_set.push(&proxy_record) {
@@ -204,8 +207,16 @@ impl TrspAuthority {
                     "Record already exists ({}): r: {:?}, set: {:?}",
                     e, proxy_record, records_set,
                 );
+                available_ipv4s.push_front(mapped_ip);
                 continue
             }
+        }
+        if let Err(e) = inner_storage.upsert(name, rtype, &records_set) {
+            error!(
+                "Error while adding ProxyRecordSet to inner storage for domain '{}': {}",
+                name, e
+            );
+            return Err(ResolveError::from("error_while_push_records_set"))
         }
         Ok(self.build_lookup(name, rtype, &records_set))
         //return Err(ResolveError::from("add_blocked_domain"))
