@@ -168,7 +168,7 @@ impl TrspAuthority {
         let mut records_set = ProxyRecordSet::new(Instant::now());
         let mut inner_storage = self.inner_storage.write().await;
         let mut available_ipv4s = self.available_ipv4_inner_ips.write().await;
-        // TODO refactoring and IPV6?
+        // TODO refactoring, tests and  may be IPV6?
         for record in lookup.records() {
             debug!("{:?}", records_set);
             debug!("{:?}", available_ipv4s.range(..10));
