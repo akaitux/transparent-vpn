@@ -4,12 +4,12 @@ use std::{
     str::FromStr,
     collections::{HashMap, VecDeque},
     sync::Arc,
-    net::Ipv4Addr,
+    net::{Ipv4Addr, IpAddr},
 };
 
 use ipnet::Ipv4Net;
 use tokio::sync::RwLock;
-use tracing::{debug, warn, error};
+use tracing::{debug, warn, error, info};
 
 
 use trust_dns_server::{
@@ -102,8 +102,8 @@ impl TrspAuthority {
     }
 
 
-    pub async fn inner_lookup(&self, name: &LowerName, rtype: RecordType) -> Result<Lookup, ResolveError>
-        //where N: IntoName
+    pub async fn inner_lookup(&self, name: &LowerName, rtype: RecordType)
+        -> Result<Lookup, ResolveError>
     {
         let storage = self.inner_storage.read().await;
         let records_set = if let Some(r) = storage.find(&name, rtype) {
@@ -117,29 +117,98 @@ impl TrspAuthority {
         query.set_name(Name::from(name));
         query.set_query_type(rtype);
 
-        Ok(Lookup::new_with_deadline(
+        Ok(self.build_lookup(name, rtype, &records_set))
+    }
+
+    fn build_lookup(
+        &self,
+        name: &LowerName,
+        rtype: RecordType,
+        records_set: &ProxyRecordSet
+    ) -> Lookup
+    {
+        let mut query = Query::new();
+        query.set_name(Name::from(name));
+        query.set_query_type(rtype);
+
+        Lookup::new_with_deadline(
             query,
             Arc::from(records_set.mapped_records()),
             Instant::now(),
-        ))
+        )
+
     }
 
-    pub async fn add_blocked_domain(&self, name: &LowerName, rtype: RecordType) -> Result<Lookup, ResolveError> {
+    async fn update_record(&self, name: &LowerName, rtype: RecordType)
+        -> Result<Lookup, ResolveError>
+    {
+        // TODO UPDATE
+        let inner_storage = self.inner_storage.write().await;
+        if let Some(records_set) = inner_storage.find(name, rtype) {
+            Ok(self.build_lookup(name, rtype, records_set.as_ref()))
+        } else {
+            Err(ResolveError::from("Not Found"))
+        }
+    }
+
+    pub async fn add_blocked_domain(&self, name: &LowerName, rtype: RecordType)
+        -> Result<Lookup, ResolveError>
+    {
+        info!("Add blocked domain: {} ; {}", name, rtype);
+
+        let inner_storage = self.inner_storage.read().await;
+        if let Some(r) = inner_storage.find(name, rtype) {
+            drop(inner_storage);
+            info!("Domain already exists, update: {} ; {}", name, rtype);
+            return self.update_record(name, rtype).await
+        }
+        drop(inner_storage);
+
         let lookup = self.forwarder.lookup(name, rtype).await?;
         let lookup_time = Instant::now();
-        let mut proxy_recordset = ProxyRecordSet::new();
+        let mut records_set = ProxyRecordSet::new();
+        let inner_storage = self.inner_storage.write().await;
+        let mut available_ipv4s = self.available_ipv4_inner_ips.write().await;
         for record in lookup.records() {
-            if record.rr_type() != RecordType::A && record.rr_type() != RecordType::AAAA {
+            if record.rr_type() != RecordType::A  {
+                info!(
+                    "Domain record is not A, continue: {} ; {}",
+                    name, record.rr_type()
+                );
                 continue
             }
-            let mut available_ipv4s = self.available_ipv4_inner_ips.write().await;
-            let mapped_ip = available_ipv4s.pop_front();
-            //let proxy_record = ProxyRecord::new(record.data());
-            drop(available_ipv4s);
-        }
+            if record.data().is_none() {
+                info!("Domain record is empty, skip: {}", name);
+                continue
 
-        let storage = self.inner_storage.write().await;
-        return Err(ResolveError::from("add_blocked_domain"))
+            }
+            let mapped_ip: IpAddr = if let Some(ip) = available_ipv4s.pop_front() {
+                ip.into()
+            } else {
+                error!("Mapped ip set is empty");
+                return Err(ResolveError::from("Mapped ip set is empty"))
+            };
+            let ip_addr = if let Some(ip) = record.data().unwrap().to_ip_addr() {
+                ip
+            } else {
+                info!("Something wrong, record not contains ip: {} ; {:?}", name, record.data());
+                continue
+            };
+            let proxy_record = ProxyRecord::new(
+                ip_addr,
+                mapped_ip,
+            );
+
+            if let Err(e) = records_set.push(&proxy_record) {
+                error!(
+                    "Record already exists ({}): r: {:?}, set: {:?}",
+                    e, proxy_record, records_set,
+                );
+                continue
+            }
+        }
+        Ok(self.build_lookup(name, rtype, &records_set))
+        //return Err(ResolveError::from("add_blocked_domain"))
     }
 }
 

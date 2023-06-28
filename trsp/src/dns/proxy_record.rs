@@ -1,4 +1,7 @@
-use std::net::IpAddr;
+use std::{
+    net::IpAddr,
+    error::Error,
+};
 
 use tokio::time::Instant;
 use trust_dns_server::proto::rr::{Record, RecordType, RData};
@@ -29,6 +32,20 @@ impl ProxyRecordSet {
             records: vec![],
             resolved_at: None,
         }
+    }
+
+    pub fn push(&mut self, record: &ProxyRecord) -> Result<(), Box<dyn Error>> {
+        for r in &self.records {
+            if r.original_addr == record.original_addr {
+                return Err("original_addr_already_exists".into())
+            }
+            if r.mapped_addr == r.mapped_addr {
+                return Err("mapped_addr_already_exists".into())
+            }
+        }
+
+        self.records.push(record.clone());
+        Ok(())
     }
 
     pub fn mapped_records(&self) -> Vec<Record> {
