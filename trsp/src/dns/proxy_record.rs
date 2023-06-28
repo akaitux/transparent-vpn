@@ -39,7 +39,7 @@ impl ProxyRecordSet {
             if r.original_addr == record.original_addr {
                 return Err("original_addr_already_exists".into())
             }
-            if r.mapped_addr == r.mapped_addr {
+            if r.mapped_addr == record.mapped_addr {
                 return Err("mapped_addr_already_exists".into())
             }
         }
