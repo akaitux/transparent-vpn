@@ -24,6 +24,13 @@ pub struct ProxyRecordSet {
 
 impl ProxyRecordSet {
 
+    pub fn new() -> Self {
+        Self {
+            records: vec![],
+            resolved_at: None,
+        }
+    }
+
     pub fn mapped_records(&self) -> Vec<Record> {
         self.records.iter().map(|pr| {
             let mut r = Record::new();

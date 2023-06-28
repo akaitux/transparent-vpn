@@ -1,4 +1,5 @@
 use std::{
+    error::Error,
     collections::{HashMap, HashSet},
     sync::Arc,
     net::{IpAddr, Ipv4Addr, Ipv6Addr},
@@ -15,7 +16,7 @@ use trust_dns_server::{
 };
 
 use std::cmp::Ordering;
-use tokio::time::Instant;
+use std::time::Instant;
 
 use super::proxy_record::ProxyRecordSet;
 
@@ -23,6 +24,7 @@ use super::proxy_record::ProxyRecordSet;
 #[derive(Default)]
 pub struct InnerStorage {
     records: HashMap<RrKey, Arc<ProxyRecordSet>>,
+    internal_ip_to_record: HashMap<IpAddr, RrKey>,
 }
 
 impl InnerStorage {
@@ -30,11 +32,16 @@ impl InnerStorage {
     pub fn new() -> Self {
         Self {
             records: HashMap::new(),
+            internal_ip_to_record: HashMap::new(),
         }
     }
 
     pub fn find(&self, name: &LowerName, rtype: RecordType) -> Option<Arc<ProxyRecordSet>> {
         self.inner_lookup(name, rtype)
+    }
+
+    pub fn upsert(&self, name: &LowerName, rtype: RecordType) -> Result<Arc<ProxyRecordSet>, Box<dyn Error>> {
+        return Err("todo".into())
     }
 
     fn inner_lookup(

@@ -1,4 +1,4 @@
-use std::{net::SocketAddr, sync::Arc};
+use std::{net::SocketAddr, sync::Arc, time::Duration};
 
 use crate::options::Options;
 use trust_dns_server::{
@@ -94,6 +94,7 @@ impl Handler {
         }
 
         let mut resolver_options = ResolverOpts::default();
+        resolver_options.timeout = Duration::from_secs(5);
         resolver_options.preserve_intermediates = true;
         return ForwardConfig{
                 name_servers,

@@ -1,10 +1,14 @@
 use std::{
     io,
-    str::FromStr, collections::HashMap, sync::RwLock,
+    time::Instant,
+    str::FromStr,
+    collections::{HashMap, VecDeque},
+    sync::Arc,
+    net::Ipv4Addr,
 };
 
 use ipnet::Ipv4Net;
-use tokio::time::Instant;
+use tokio::sync::RwLock;
 use tracing::{debug, warn, error};
 
 
@@ -15,7 +19,7 @@ use trust_dns_server::{
     },
     client::{
         op::ResponseCode,
-        rr::{LowerName, RecordType},
+        rr::{LowerName, RecordType, Name},
     },
     server::RequestInfo,
     store::forwarder::{ForwardLookup, ForwardConfig},
@@ -25,11 +29,11 @@ use trust_dns_server::{
         config::ResolverConfig,
         TokioHandle,
         error::{ResolveError, ResolveErrorKind},
-    },
+    }, proto::op::Query,
 };
 
 use std::error::Error;
-use super::{domains_set::ArcDomainsSet, trsp_resolver::TrspResolver};
+use super::{domains_set::ArcDomainsSet, inner_storage::InnerStorage, proxy_record::{ProxyRecordSet, ProxyRecord}};
 
 
 //const FORWARDER_CACHE_SIZE: usize = 1000;
@@ -46,8 +50,10 @@ use super::{domains_set::ArcDomainsSet, trsp_resolver::TrspResolver};
 pub struct TrspAuthority {
     origin: LowerName,
     domains_set: ArcDomainsSet,
-    resolver: TrspResolver,
-    forwarder: TokioAsyncResolver,
+    forwarder: Arc<TokioAsyncResolver>,
+    inner_storage: RwLock<InnerStorage>,
+    mapping_ipv4_subnet: Ipv4Net,
+    available_ipv4_inner_ips: RwLock<VecDeque<Ipv4Addr>>,
     //forwarder_cache: RwLock<HashMap<LowerName, ForwarderCacheRecord>>,
 }
 
@@ -60,20 +66,23 @@ impl TrspAuthority {
     ) -> Result<Self, Box<dyn Error>>
     {
         //let resolver = TrspAuthority::create_resolver(forward_config)?;
-        let resolver = TrspAuthority::create_resolver(&mapping_ipv4_subnet)?;
-        let forwarder = TrspAuthority::create_forward_resolver(forward_config)?;
+        let forwarder = TrspAuthority::create_forwarder(forward_config)?;
         let this = Self {
             origin: LowerName::from_str(".").unwrap(),
             domains_set,
-            resolver,
             forwarder,
+            inner_storage: RwLock::new(InnerStorage::new()),
+            mapping_ipv4_subnet: mapping_ipv4_subnet.clone(),
+            available_ipv4_inner_ips: RwLock::new(VecDeque::from_iter(mapping_ipv4_subnet.hosts())),
             //forwarder_cache: RwLock::new(HashMap::with_capacity(FORWARDER_CACHE_SIZE)),
         };
         Ok(this)
     }
 
 
-    fn create_forward_resolver(forward_config: &ForwardConfig) -> Result<TokioAsyncResolver, Box<dyn Error>> {
+    fn create_forwarder(forward_config: &ForwardConfig)
+        -> Result<Arc<TokioAsyncResolver>, Box<dyn Error>>
+    {
         let name_servers = forward_config.name_servers.clone();
         let mut options = forward_config.options.unwrap_or_default();
 
@@ -89,11 +98,48 @@ impl TrspAuthority {
         let resolver = TokioAsyncResolver::new(config, options, TokioHandle)
             .map_err(|e| format!("error constructing new Resolver: {}", e))?;
 
-        return Ok(resolver)
+        return Ok(Arc::new(resolver))
     }
 
-    fn create_resolver(mapping_ipv4_subnet: &Ipv4Net) -> Result<TrspResolver, Box<dyn Error>> {
-        TrspResolver::new(mapping_ipv4_subnet)
+
+    pub async fn inner_lookup(&self, name: &LowerName, rtype: RecordType) -> Result<Lookup, ResolveError>
+        //where N: IntoName
+    {
+        let storage = self.inner_storage.read().await;
+        let records_set = if let Some(r) = storage.find(&name, rtype) {
+            r
+        } else {
+            return Err(ResolveError::from("Not Found"))
+        };
+        drop(storage);
+
+        let mut query = Query::new();
+        query.set_name(Name::from(name));
+        query.set_query_type(rtype);
+
+        Ok(Lookup::new_with_deadline(
+            query,
+            Arc::from(records_set.mapped_records()),
+            Instant::now(),
+        ))
+    }
+
+    pub async fn add_blocked_domain(&self, name: &LowerName, rtype: RecordType) -> Result<Lookup, ResolveError> {
+        let lookup = self.forwarder.lookup(name, rtype).await?;
+        let lookup_time = Instant::now();
+        let mut proxy_recordset = ProxyRecordSet::new();
+        for record in lookup.records() {
+            if record.rr_type() != RecordType::A && record.rr_type() != RecordType::AAAA {
+                continue
+            }
+            let mut available_ipv4s = self.available_ipv4_inner_ips.write().await;
+            let mapped_ip = available_ipv4s.pop_front();
+            //let proxy_record = ProxyRecord::new(record.data());
+            drop(available_ipv4s);
+        }
+
+        let storage = self.inner_storage.write().await;
+        return Err(ResolveError::from("add_blocked_domain"))
     }
 }
 
@@ -136,13 +182,13 @@ impl Authority for TrspAuthority {
         debug_assert!(self.origin.zone_of(name));
 
         debug!("forwarding lookup: {} {}", name, rtype);
-        let mapping_resolve = self.resolver.lookup(name.clone(), rtype).await;
+        let mapping_resolve = self.inner_lookup(&name, rtype).await;
         let resolve = if let Err(e) = mapping_resolve {
             match e.kind() {
                  ResolveErrorKind::Message("Not Found") => {
                     debug!("Not found '{}' {}' in internal storage", rtype, name);
                     if self.domains_set.is_domain_blocked(name.to_string().as_ref()).await {
-                        self.resolver.add_blocked_domain(name.clone(), rtype).await
+                        self.add_blocked_domain(name, rtype).await
                     } else {
                         self.forwarder.lookup(name.clone(), rtype).await
                     }
