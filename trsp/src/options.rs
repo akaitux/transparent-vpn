@@ -67,6 +67,20 @@ pub struct Options {
     ]
     pub dns_zapret_blocked_nxdomains_txt: String,
 
+    #[clap(
+        long,
+        default_value = "120",
+        env = "TRSP_DNS_POSITIVE_MAX_TTL")
+    ]
+    pub dns_positive_max_ttl: u16,
+
+    #[clap(
+        long,
+        default_value = "0",
+        env = "TRSP_DNS_NEGATIVE_MAX_TTL")
+    ]
+    pub dns_negative_max_ttl: u16,
+
     #[clap(long, action, default_value_t=false, env="TRSP_DNS_USE_NXDOMAINS")]
     pub dns_use_nxdomains: bool,
 
@@ -87,9 +101,16 @@ pub struct Options {
     #[clap(
         long,
         default_value = "10.224.128.0/17",
-        env = "MAPPING_IPV4_SUBNET")
+        env = "TRSP_DNS_MAPPING_IPV4_SUBNET")
     ]
-    pub mapping_ipv4_subnet: Ipv4Net,
+    pub dns_mapping_ipv4_subnet: Ipv4Net,
+
+    #[clap(
+        long,
+        default_value = "false",
+        env = "TRSP_DNS_DISABLE_IPTABLES_COMMANDS")
+    ]
+    pub dns_disable_iptables_commands: bool,
 
 
     // WEB

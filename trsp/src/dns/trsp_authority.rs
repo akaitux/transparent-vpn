@@ -33,7 +33,7 @@ use trust_dns_server::{
 };
 
 use std::error::Error;
-use super::{domains_set::ArcDomainsSet, inner_storage::InnerStorage, proxy_record::{ProxyRecordSet, ProxyRecord}};
+use super::{domains_set::ArcDomainsSet, inner_storage::InnerStorage, proxy_record::{ProxyRecordSet, ProxyRecord}, routing::{Router, Iptables}};
 
 
 //const FORWARDER_CACHE_SIZE: usize = 1000;
@@ -54,6 +54,7 @@ pub struct TrspAuthority {
     inner_storage: RwLock<InnerStorage>,
     mapping_ipv4_subnet: Ipv4Net,
     available_ipv4_inner_ips: RwLock<VecDeque<Ipv4Addr>>,
+    router: Box<dyn Router>,
     //forwarder_cache: RwLock<HashMap<LowerName, ForwarderCacheRecord>>,
 }
 
@@ -74,6 +75,7 @@ impl TrspAuthority {
             inner_storage: RwLock::new(InnerStorage::new()),
             mapping_ipv4_subnet: mapping_ipv4_subnet.clone(),
             available_ipv4_inner_ips: RwLock::new(VecDeque::from_iter(mapping_ipv4_subnet.hosts())),
+            router: Box::new(Iptables::new()),
             //forwarder_cache: RwLock::new(HashMap::with_capacity(FORWARDER_CACHE_SIZE)),
         };
         Ok(this)

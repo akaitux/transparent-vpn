@@ -68,7 +68,7 @@ impl Handler {
         let trsp_authority = TrspAuthority::new(
             blocked_domains_set,
             forwarder_config,
-            &options.mapping_ipv4_subnet,
+            &options.dns_mapping_ipv4_subnet,
         )?;
         let mut catalog = Catalog::new();
         catalog.upsert(
