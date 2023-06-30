@@ -1,8 +1,8 @@
 use std::{
     net::IpAddr,
     error::Error,
-    time::Instant,
 };
+use chrono::{DateTime, Utc};
 
 use trust_dns_server::proto::rr::{Record, RecordType, RData};
 
@@ -21,14 +21,16 @@ impl ProxyRecord {
 
 #[derive(Eq, PartialEq, Debug, Hash, Clone)]
 pub struct ProxyRecordSet {
+    pub domain: String,
     pub records: Vec<ProxyRecord>,
-    pub resolved_at: Instant,
+    pub resolved_at: DateTime<Utc>,
 }
 
 impl ProxyRecordSet {
 
-    pub fn new(lookup_time: Instant) -> Self {
+    pub fn new(domain: &str, lookup_time: DateTime<Utc>) -> Self {
         Self {
+            domain: String::from(domain),
             records: vec![],
             resolved_at: lookup_time,
         }

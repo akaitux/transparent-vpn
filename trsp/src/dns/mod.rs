@@ -1,5 +1,5 @@
 pub mod server;
-mod routing;
+mod router;
 mod proxy_record;
 mod inner_storage;
 mod trsp_authority;

@@ -7,6 +7,7 @@ use std::{
     net::{Ipv4Addr, IpAddr},
 };
 
+use chrono::{DateTime, Utc};
 use ipnet::Ipv4Net;
 use tokio::sync::RwLock;
 use tracing::{debug, warn, error, info};
@@ -33,7 +34,12 @@ use trust_dns_server::{
 };
 
 use std::error::Error;
-use super::{domains_set::ArcDomainsSet, inner_storage::InnerStorage, proxy_record::{ProxyRecordSet, ProxyRecord}, routing::{Router, Iptables}};
+use super::{
+    domains_set::ArcDomainsSet,
+    inner_storage::InnerStorage,
+    proxy_record::{ProxyRecordSet, ProxyRecord},
+    router::{Router, Iptables}
+};
 
 
 //const FORWARDER_CACHE_SIZE: usize = 1000;
@@ -75,7 +81,7 @@ impl TrspAuthority {
             inner_storage: RwLock::new(InnerStorage::new()),
             mapping_ipv4_subnet: mapping_ipv4_subnet.clone(),
             available_ipv4_inner_ips: RwLock::new(VecDeque::from_iter(mapping_ipv4_subnet.hosts())),
-            router: Box::new(Iptables::new()),
+            router: Box::new(Iptables::new(None, false)),
             //forwarder_cache: RwLock::new(HashMap::with_capacity(FORWARDER_CACHE_SIZE)),
         };
         Ok(this)
@@ -159,7 +165,7 @@ impl TrspAuthority {
         info!("Add blocked domain: {} ; {}", name, rtype);
 
         let inner_storage = self.inner_storage.read().await;
-        if let Some(r) = inner_storage.find(name, rtype) {
+        if let Some(_) = inner_storage.find(name, rtype) {
             drop(inner_storage);
             info!("Domain already exists, update: {} ; {}", name, rtype);
             return self.update_record(name, rtype).await
@@ -167,7 +173,7 @@ impl TrspAuthority {
         drop(inner_storage);
 
         let lookup = self.forwarder.lookup(name, rtype).await?;
-        let mut records_set = ProxyRecordSet::new(Instant::now());
+        let mut records_set = ProxyRecordSet::new(name.to_string().as_ref(), Utc::now());
         let mut inner_storage = self.inner_storage.write().await;
         let mut available_ipv4s = self.available_ipv4_inner_ips.write().await;
         // TODO refactoring, tests and  may be IPV6?
