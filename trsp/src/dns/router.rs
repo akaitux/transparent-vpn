@@ -15,7 +15,7 @@ use regex::Regex;
 
 lazy_static!{
     static ref IPTABLES_REGEX: Regex = Regex::new(
-        r"\S+\s+\S+\s+\S+\s+(\S+)\s+(\S+)\s+\/\*(.+)\*\/\s+to:(\S+)"
+        r"\S+\s+\S+\s+\S+\s+\S+\s+(\S+)\s+/\*(.+)\*/\s+to:(\S+)"
     ).unwrap();
 }
 
@@ -88,15 +88,20 @@ impl Iptables {
         } else {
             return Err(format!("Iptables line != regex: '{}'", iptables_line))
         };
-
-        println!("!!!! {}", regex_caps.get(1).map_or("", |m| m.as_str()));
-
-        let comment: Option<String> = None;
-        if let Some(c) = comment {
-            println!("!!! COMMENT: {}", c);
-        } else {
-            println!("!!! COMMENT IS EMPTY");
+        let regex_caps: Vec<_> = regex_caps.iter().filter_map(|g| g).collect();
+        if regex_caps.len() != 4 {
+            return Err(
+                format!(
+                    "Error while parsing iptables line after regex,
+                    groups count != 4 \n{}\n{:?}\n{}",
+                    iptables_line, regex_caps, IPTABLES_REGEX.as_str(),
+                ));
         }
+
+        let original_addr = regex_caps[1].as_str();
+        let comment = regex_caps[2].as_str();
+        let mapped_addr = regex_caps[3].as_str();
+
         //Ok((ProxyRecord {
         //    original_addr,
         //    mapped_addr,
