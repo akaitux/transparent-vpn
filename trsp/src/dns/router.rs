@@ -8,7 +8,7 @@ use std::{
 };
 use std::process::{Command, Output};
 use lazy_static::lazy_static;
-use tracing::error;
+use tracing::{error, debug};
 use chrono::{DateTime, Utc};
 use regex::Regex;
 
@@ -134,10 +134,12 @@ impl Router for Iptables {
     }
 
     fn add_route(&self, record_set: &ProxyRecordSet) -> Result<(), Box<dyn Error>> {
+        debug!("ADD ROUTE: {:?}", record_set);
         Ok(())
     }
 
     fn del_route(&self, record_set: &ProxyRecordSet) -> Result<(), Box<dyn Error>> {
+        debug!("DEL ROUTE: {:?}", record_set);
        Ok(())
     }
 
