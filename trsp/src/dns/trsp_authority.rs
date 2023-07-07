@@ -31,7 +31,7 @@ use trust_dns_server::{
         config::ResolverConfig,
         TokioHandle,
         error::{ResolveError, ResolveErrorKind},
-    }, proto::op::Query,
+    }, proto::{op::Query, rr::Record},
 };
 
 use std::error::Error;
@@ -164,54 +164,87 @@ impl TrspAuthority {
 
     }
 
-    async fn update_record(&self, name: &LowerName, rtype: RecordType)
+    fn is_a_record_valid(&self, record: &Record) -> bool {
+        if record.rr_type() != RecordType::A  {
+            info!(
+                "Domain record is not A, continue: {} ; {}",
+                record.name(), record.rr_type()
+            );
+            return false
+        }
+        if record.data().is_none() {
+            info!("Domain record is empty, skip: {}", record.name());
+            return false
+        }
+        true
+    }
+
+    async fn update_record(&self, name: &LowerName, rtype: RecordType, record_set: &ProxyRecordSet)
         -> Result<Lookup, ResolveError>
     {
         // TODO UPDATE
-        let inner_storage = self.inner_storage.write().await;
-        if let Some(records_set) = inner_storage.find(name, rtype) {
-            Ok(self.build_lookup(name, rtype, records_set.as_ref()))
-        } else {
-            Err(ResolveError::from("Not Found"))
-        }
-    }
-
-    pub async fn add_blocked_domain(&self, name: &LowerName, rtype: RecordType)
-        -> Result<Lookup, ResolveError>
-    {
-        info!("Add blocked domain: {} ; {}", name, rtype);
-
-        let inner_storage = self.inner_storage.read().await;
-        if let Some(_) = inner_storage.find(name, rtype) {
-            drop(inner_storage);
-            info!("Domain already exists, update: {} ; {}", name, rtype);
-            return self.update_record(name, rtype).await
-        }
-        drop(inner_storage);
-
         let lookup = self.forwarder.lookup(name, rtype).await?;
-        let mut records_set = ProxyRecordSet::new(
-            name.to_string().as_ref(),
-            Utc::now(),
-            self.max_record_lookup_cache_ttl
-        );
+        let lookup_time = Utc::now();
+
         let mut inner_storage = self.inner_storage.write().await;
         let mut available_ipv4s = self.available_ipv4_inner_ips.write().await;
-        // TODO refactoring, tests and  may be IPV6?
-        for record in lookup.records() {
-            debug!("{:?}", records_set);
-            debug!("{:?}", available_ipv4s.range(..10));
-            if record.rr_type() != RecordType::A  {
-                info!(
-                    "Domain record is not A, continue: {} ; {}",
-                    name, record.rr_type()
-                );
-                continue
-            }
-            if record.data().is_none() {
-                info!("Domain record is empty, skip: {}", name);
-                continue
 
+        if let Err(e) = self.router.del_route(&record_set) {
+            error!("update_record: Error while deleting route '{:?}': {}", record_set, e);
+            return Err(ResolveError::from("internal_error"))
+        }
+
+        for record in record_set.records() {
+            match record.mapped_addr {
+                IpAddr::V4(ip) => available_ipv4s.push_front(ip),
+                IpAddr::V6(ip) => {
+                    error!("update_record: IPV6 not supported: {}", ip);
+                    return Err(ResolveError::from("update_record: IPV6 not supported"))
+                }
+            }
+        }
+
+        let mut record_set = ProxyRecordSet::new(
+            name.to_string().as_ref(),
+            lookup_time,
+            self.max_record_lookup_cache_ttl
+        );
+
+        self.add_records_to_record_set(&mut record_set, &lookup, &mut available_ipv4s)?;
+        if let Err(e) = inner_storage.upsert(name, rtype, &record_set) {
+            error!(
+                "Error while updating ProxyRecordSet in inner storage for domain '{}': {}",
+                name, e
+            );
+            for record in record_set.records() {
+                match record.mapped_addr {
+                    IpAddr::V4(a) => available_ipv4s.push_front(a),
+                    _ => {}
+                }
+            }
+            return Err(ResolveError::from("error_while_push_records_set"))
+        }
+
+        if let Err(e) = self.router.add_route(&record_set) {
+            error!("update_record: Error while adding route '{:?}': {}", record_set, e);
+            return Err(ResolveError::from("internal_error"))
+        }
+
+        Ok(self.build_lookup(name, rtype, &record_set))
+    }
+
+    fn add_records_to_record_set(
+        &self,
+        record_set: &mut ProxyRecordSet,
+        lookup: &Lookup,
+        available_ipv4s: &mut VecDeque<Ipv4Addr>,
+    ) -> Result<(), ResolveError>
+    {
+        // TODO refactoring, tests and  may be IPV6?
+
+        for record in lookup.records() {
+            if !self.is_a_record_valid(record) {
+                continue
             }
             let mapped_ip: Ipv4Addr = if let Some(ip) = available_ipv4s.pop_front() {
                 ip.into()
@@ -222,7 +255,7 @@ impl TrspAuthority {
             let ip_addr = if let Some(ip) = record.data().unwrap().to_ip_addr() {
                 ip
             } else {
-                info!("Something wrong, record not contains ip: {} ; {:?}", name, record.data());
+                info!("Something wrong, record not contains ip: {} ; {:?}", record.name(), record.data());
                 available_ipv4s.push_front(mapped_ip);
                 continue
             };
@@ -231,21 +264,47 @@ impl TrspAuthority {
                 mapped_ip.into(),
             );
 
-            if let Err(e) = records_set.push(&proxy_record) {
+            if let Err(e) = record_set.push(&proxy_record) {
                 error!(
                     "Record already exists ({}): r: {:?}, set: {:?}",
-                    e, proxy_record, records_set,
+                    e, proxy_record, record_set,
                 );
                 available_ipv4s.push_front(mapped_ip);
                 continue
             }
         }
-        if let Err(e) = inner_storage.upsert(name, rtype, &records_set) {
+        Ok(())
+    }
+
+    pub async fn add_blocked_domain(&self, name: &LowerName, rtype: RecordType)
+        -> Result<Lookup, ResolveError>
+    {
+        info!("Add blocked domain: {} ; {}", name, rtype);
+
+        let inner_storage = self.inner_storage.read().await;
+        if let Some(r) = inner_storage.find(name, rtype) {
+            drop(inner_storage);
+            info!("Domain already exists, update: {} ; {}", name, rtype);
+            return self.update_record(name, rtype, &r).await
+        }
+        drop(inner_storage);
+
+        let lookup = self.forwarder.lookup(name, rtype).await?;
+        let mut record_set = ProxyRecordSet::new(
+            name.to_string().as_ref(),
+            Utc::now(),
+            self.max_record_lookup_cache_ttl
+        );
+
+        let mut inner_storage = self.inner_storage.write().await;
+        let mut available_ipv4s = self.available_ipv4_inner_ips.write().await;
+        self.add_records_to_record_set(&mut record_set, &lookup,  &mut available_ipv4s)?;
+        if let Err(e) = inner_storage.upsert(name, rtype, &record_set) {
             error!(
                 "Error while adding ProxyRecordSet to inner storage for domain '{}': {}",
                 name, e
             );
-            for record in records_set.records {
+            for record in record_set.records() {
                 match record.mapped_addr {
                     IpAddr::V4(a) => available_ipv4s.push_front(a),
                     _ => {}
@@ -253,7 +312,13 @@ impl TrspAuthority {
             }
             return Err(ResolveError::from("error_while_push_records_set"))
         }
-        Ok(self.build_lookup(name, rtype, &records_set))
+
+        if let Err(e) = self.router.add_route(&record_set) {
+            error!("add_blocked_domain: Error while adding route '{:?}': {}", record_set, e);
+            return Err(ResolveError::from("internal_error"))
+        }
+
+        Ok(self.build_lookup(name, rtype, &record_set))
     }
 }
 

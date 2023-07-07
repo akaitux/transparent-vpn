@@ -24,7 +24,7 @@ impl ProxyRecord {
 #[derive(Eq, PartialEq, Debug, Hash, Clone)]
 pub struct ProxyRecordSet {
     pub domain: String,
-    pub records: Vec<ProxyRecord>,
+    records: Vec<ProxyRecord>,
     pub resolved_at: DateTime<Utc>,
     pub ttl: Duration,
 }
@@ -38,6 +38,10 @@ impl ProxyRecordSet {
             resolved_at: lookup_time,
             ttl,
         }
+    }
+
+    pub fn records(&self) -> &Vec<ProxyRecord> {
+        return &self.records
     }
 
     pub fn push(&mut self, record: &ProxyRecord) -> Result<(), Box<dyn Error>> {
