@@ -68,7 +68,7 @@ impl Handler {
         let trsp_authority = TrspAuthority::new(
             blocked_domains_set,
             forwarder_config,
-            &options.dns_mapping_ipv4_subnet,
+            &options,
         )?;
         let mut catalog = Catalog::new();
         catalog.upsert(
@@ -96,6 +96,10 @@ impl Handler {
         let mut resolver_options = ResolverOpts::default();
         resolver_options.timeout = Duration::from_secs(5);
         resolver_options.preserve_intermediates = true;
+        resolver_options.positive_max_ttl = Some(Duration::from_secs(options.dns_positive_max_ttl));
+        resolver_options.negative_max_ttl = Some(Duration::from_secs(options.dns_negative_max_ttl));
+        resolver_options.positive_min_ttl = Some(Duration::from_secs(options.dns_positive_min_ttl));
+        resolver_options.negative_min_ttl = Some(Duration::from_secs(options.dns_negative_min_ttl));
         return ForwardConfig{
                 name_servers,
                 options: Some(resolver_options),

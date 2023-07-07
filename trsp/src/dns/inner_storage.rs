@@ -1,22 +1,12 @@
 use std::{
     error::Error,
-    collections::{HashMap, HashSet},
+    collections::HashMap,
     sync::Arc,
-    net::{IpAddr, Ipv4Addr, Ipv6Addr},
+    net::IpAddr,
 };
 
-use ipnet::Ipv4Net;
-use tracing::warn;
 
-
-use trust_dns_server::{
-    authority::LookupOptions,
-    client::rr::{DNSClass, LowerName, Record, RecordSet, RecordType, RrKey},
-    resolver::IntoName, proto::rr::RData,
-};
-
-use std::cmp::Ordering;
-use std::time::Instant;
+use trust_dns_server::client::rr::{LowerName, RecordType, RrKey};
 
 use super::proxy_record::ProxyRecordSet;
 

@@ -8,6 +8,7 @@ use std::{
 };
 
 use chrono::{DateTime, Utc};
+use std::time::Duration;
 use ipnet::Ipv4Net;
 use tokio::sync::RwLock;
 use tracing::{debug, warn, error, info};
@@ -34,6 +35,8 @@ use trust_dns_server::{
 };
 
 use std::error::Error;
+use crate::options::Options;
+
 use super::{
     domains_set::ArcDomainsSet,
     inner_storage::InnerStorage,
@@ -61,6 +64,9 @@ pub struct TrspAuthority {
     mapping_ipv4_subnet: Ipv4Net,
     available_ipv4_inner_ips: RwLock<VecDeque<Ipv4Addr>>,
     router: Box<dyn Router>,
+    max_positive_ttl: Duration,
+    max_negative_ttl: Duration,
+    max_record_lookup_cache_ttl: Duration,
     //forwarder_cache: RwLock<HashMap<LowerName, ForwarderCacheRecord>>,
 }
 
@@ -69,19 +75,24 @@ impl TrspAuthority {
     pub fn new(
         domains_set: ArcDomainsSet,
         forward_config: &ForwardConfig,
-        mapping_ipv4_subnet: &Ipv4Net,
+        options: &Options,
+
     ) -> Result<Self, Box<dyn Error>>
     {
         //let resolver = TrspAuthority::create_resolver(forward_config)?;
+        let mapping_ipv4_subnet = options.dns_mapping_ipv4_subnet.clone();
         let forwarder = TrspAuthority::create_forwarder(forward_config)?;
         let this = Self {
             origin: LowerName::from_str(".").unwrap(),
             domains_set,
             forwarder,
             inner_storage: RwLock::new(InnerStorage::new()),
-            mapping_ipv4_subnet: mapping_ipv4_subnet.clone(),
+            mapping_ipv4_subnet,
             available_ipv4_inner_ips: RwLock::new(VecDeque::from_iter(mapping_ipv4_subnet.hosts())),
             router: Box::new(Iptables::new(None, false)),
+            max_positive_ttl: Duration::from_secs(options.dns_positive_max_ttl),
+            max_negative_ttl: Duration::from_secs(options.dns_negative_max_ttl),
+            max_record_lookup_cache_ttl: Duration::from_secs(options.dns_record_lookup_max_ttl)
             //forwarder_cache: RwLock::new(HashMap::with_capacity(FORWARDER_CACHE_SIZE)),
         };
         Ok(this)
@@ -121,6 +132,11 @@ impl TrspAuthority {
         };
         drop(storage);
 
+        let last_resolved = (Utc::now() - records_set.resolved_at).num_seconds();
+        if last_resolved > self.max_record_lookup_cache_ttl.as_secs().try_into().unwrap() {
+            return Err(ResolveError::from("Not Found"))
+        }
+
         let mut query = Query::new();
         query.set_name(Name::from(name));
         query.set_query_type(rtype);
@@ -128,11 +144,12 @@ impl TrspAuthority {
         Ok(self.build_lookup(name, rtype, &records_set))
     }
 
+
     fn build_lookup(
         &self,
         name: &LowerName,
         rtype: RecordType,
-        records_set: &ProxyRecordSet
+        records_set: &ProxyRecordSet,
     ) -> Lookup
     {
         let mut query = Query::new();
@@ -142,7 +159,7 @@ impl TrspAuthority {
         Lookup::new_with_deadline(
             query,
             Arc::from(records_set.mapped_records()),
-            Instant::now(),
+            Instant::now() + self.max_positive_ttl,
         )
 
     }
@@ -173,7 +190,11 @@ impl TrspAuthority {
         drop(inner_storage);
 
         let lookup = self.forwarder.lookup(name, rtype).await?;
-        let mut records_set = ProxyRecordSet::new(name.to_string().as_ref(), Utc::now());
+        let mut records_set = ProxyRecordSet::new(
+            name.to_string().as_ref(),
+            Utc::now(),
+            self.max_record_lookup_cache_ttl
+        );
         let mut inner_storage = self.inner_storage.write().await;
         let mut available_ipv4s = self.available_ipv4_inner_ips.write().await;
         // TODO refactoring, tests and  may be IPV6?

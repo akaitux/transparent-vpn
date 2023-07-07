@@ -72,14 +72,36 @@ pub struct Options {
         default_value = "120",
         env = "TRSP_DNS_POSITIVE_MAX_TTL")
     ]
-    pub dns_positive_max_ttl: u16,
+    pub dns_positive_max_ttl: u64,
+
+    #[clap(
+        long,
+        default_value = "0",
+        env = "TRSP_DNS_POSITIVE_MIN_TTL")
+    ]
+    pub dns_positive_min_ttl: u64,
 
     #[clap(
         long,
         default_value = "0",
         env = "TRSP_DNS_NEGATIVE_MAX_TTL")
     ]
-    pub dns_negative_max_ttl: u16,
+    pub dns_negative_max_ttl: u64,
+
+    #[clap(
+        long,
+        default_value = "0",
+        env = "TRSP_DNS_NEGATIVE_MIN_TTL")
+    ]
+    pub dns_negative_min_ttl: u64,
+
+    #[clap(
+        long,
+        default_value = "10",
+        env = "TRSP_DNS_RECORD_LOOKUP_MAX_TTL")
+    ]
+    pub dns_record_lookup_max_ttl: u64,
+
 
     #[clap(long, action, default_value_t=false, env="TRSP_DNS_USE_NXDOMAINS")]
     pub dns_use_nxdomains: bool,
