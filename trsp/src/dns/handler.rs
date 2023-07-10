@@ -46,7 +46,7 @@ impl Handler {
         })
     }
 
-    fn add_resolvers(
+    fn add_clear_resolvers(
         resolvers: &Vec<SocketAddr>,
         ns_group: &mut NameServerConfigGroup
     )
@@ -55,10 +55,39 @@ impl Handler {
         for socket in resolvers {
             let ip = &[socket.ip()];
             let port = socket.port();
-            let _config = NameServerConfigGroup::from_ips_https(
+            ns_group.merge(NameServerConfigGroup::from_ips_clear(
+                ip, port, true
+            ));
+        }
+    }
+
+    fn add_tls_resolvers(
+        resolvers: &Vec<SocketAddr>,
+        ns_group: &mut NameServerConfigGroup
+    )
+    // Add resolvers from Options to NS Config group
+    {
+        for socket in resolvers {
+            let ip = &[socket.ip()];
+            let port = socket.port();
+            ns_group.merge(NameServerConfigGroup::from_ips_tls(
                 ip, port, socket.ip().to_string(), true
-            );
-            ns_group.merge(_config);
+            ));
+        }
+    }
+
+    fn add_https_resolvers(
+        resolvers: &Vec<SocketAddr>,
+        ns_group: &mut NameServerConfigGroup
+    )
+    // Add resolvers from Options to NS Config group
+    {
+        for socket in resolvers {
+            let ip = &[socket.ip()];
+            let port = socket.port();
+            ns_group.merge(NameServerConfigGroup::from_ips_https(
+                ip, port, socket.ip().to_string(), true
+            ));
         }
     }
 
@@ -83,9 +112,9 @@ impl Handler {
         let name_servers_ref = &mut name_servers;
 
         if let Some(https_resolvers) = &options.dns_https_resolvers {
-            Handler::add_resolvers(&https_resolvers, name_servers_ref)
+            Handler::add_https_resolvers(&https_resolvers, name_servers_ref)
         } else if let Some(plain_resolvers) = &options.dns_resolvers {
-            Handler::add_resolvers(&plain_resolvers, name_servers_ref)
+            Handler::add_clear_resolvers(&plain_resolvers, name_servers_ref)
         } else if options.dns_https_resolvers_enabled {
             name_servers.merge(NameServerConfigGroup::cloudflare_https());
         } else {
@@ -94,6 +123,8 @@ impl Handler {
         }
 
         let mut resolver_options = ResolverOpts::default();
+        resolver_options.edns0 = false;
+        resolver_options.validate = false;
         resolver_options.timeout = Duration::from_secs(5);
         resolver_options.preserve_intermediates = true;
         resolver_options.positive_max_ttl = Some(Duration::from_secs(options.dns_positive_max_ttl));

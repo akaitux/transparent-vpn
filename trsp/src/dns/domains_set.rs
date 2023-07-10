@@ -36,14 +36,19 @@ pub struct DomainsSet {
 
 impl DomainsSet {
     pub fn new(workdir: &PathBuf) -> Self {
-        DomainsSet {
+        let mut d = DomainsSet {
             included_domains: RwLock::new(Domains::new(None)),
             excluded_domains: RwLock::new(Domains::new(None)),
             imported_domains: RwLock::new(Domains::new(None)),
             workdir: workdir.clone(),
             zapret_domains_csv_url: None,
             zapret_nxdomains_txt_url: None,
-        }
+        };
+
+        let mut domains = Domains::new(None);
+        domains.set("test.akaitux.ru");
+        d.included_domains = RwLock::new(domains);
+        d
     }
 
     pub async fn is_domain_blocked(&self, name: &str) -> bool {

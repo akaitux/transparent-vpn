@@ -114,7 +114,9 @@ impl ProxyRecordSet {
     }
 
     pub fn mapped_records(&self) -> Vec<Record> {
-        self.records.iter().map(|pr| {
+        self.records.iter()
+            .filter(|r| r.cleanup_at.is_none())
+            .map(|pr| {
             let mut r = Record::new();
 
             r.set_ttl(self.calculate_ttl(&r));
