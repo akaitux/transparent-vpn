@@ -84,6 +84,8 @@ impl TrspAuthority {
         //let resolver = TrspAuthority::create_resolver(forward_config)?;
         let mapping_ipv4_subnet = options.dns_mapping_ipv4_subnet.clone();
         let forwarder = TrspAuthority::create_forwarder(forward_config)?;
+        let router = Box::new(Iptables::new(None, false, options.dns_mock_router));
+        router.cleanup()?;
         let this = Self {
             origin: LowerName::from_str(".").unwrap(),
             domains_set,
@@ -91,7 +93,7 @@ impl TrspAuthority {
             inner_storage: RwLock::new(InnerStorage::new()),
             mapping_ipv4_subnet,
             available_ipv4_inner_ips: RwLock::new(VecDeque::from_iter(mapping_ipv4_subnet.hosts())),
-            router: Box::new(Iptables::new(None, false, options.dns_mock_router)),
+            router,
             max_positive_ttl: Duration::from_secs(options.dns_positive_max_ttl),
             max_negative_ttl: Duration::from_secs(options.dns_negative_max_ttl),
             max_record_lookup_cache_ttl: Duration::from_secs(options.dns_record_lookup_max_ttl),

@@ -63,11 +63,9 @@ impl<'a> DnsServer<'a> {
         let tcp_timeout = Duration::from_secs(
             self.options.dns_tcp_timeout.into()
         );
-
         for udp in &self.options.dns_udp {
             server.register_socket(UdpSocket::bind(udp).await?);
         }
-
         for tcp in &self.options.dns_tcp {
             server.register_listener(
                 TcpListener::bind(&tcp).await?,

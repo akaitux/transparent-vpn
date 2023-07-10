@@ -262,7 +262,7 @@ impl Router for Iptables {
             functions.push(Box::new(|cmd| {self.exec_ipv6(cmd)}));
         }
         for f in functions {
-            let res = f(&vec_of_strings!["-F", &self.chain_name]);
+            let res = f(&vec_of_strings!["-t", "nat", "-F", &self.chain_name]);
             match res {
                 Ok(_) => (),
                 Err(e) => {

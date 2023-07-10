@@ -46,6 +46,20 @@ pub struct Options {
 
     #[clap(
         long,
+        default_value_t = 43200, // IN Secs, 12 hours
+        env = "TRSP_DNS_CLEANUP_RECORD_AFTER_SECS")
+    ]
+    pub dns_cleanup_record_after_secs: u16,
+
+    #[clap(
+        long,
+        default_value_t = 1800, // IN Secs, 12 hours
+        env = "TRSP_DNS_CLEANER_TIMEOUT_SECS")
+    ]
+    pub dns_cleaner_timeout_secs: u16,
+
+    #[clap(
+        long,
         help="External plain resolvers",
         value_delimiter = ';',
         env = "TRSP_DNS_RESOLVERS")
