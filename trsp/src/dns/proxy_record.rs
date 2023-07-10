@@ -113,7 +113,7 @@ impl ProxyRecordSet {
         }
     }
 
-    pub fn mapped_records(&self) -> Vec<Record> {
+    pub fn records_for_response(&self) -> Vec<Record> {
         self.records.iter()
             .filter(|r| r.cleanup_at.is_none())
             .map(|pr| {

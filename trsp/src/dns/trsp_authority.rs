@@ -172,7 +172,7 @@ impl TrspAuthority {
 
         Lookup::new_with_deadline(
             query,
-            Arc::from(records_set.mapped_records()),
+            Arc::from(records_set.records_for_response()),
             Instant::now() + self.max_positive_ttl,
         )
 
