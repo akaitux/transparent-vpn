@@ -67,6 +67,8 @@ pub struct TrspAuthority {
     max_positive_ttl: Duration,
     max_negative_ttl: Duration,
     max_record_lookup_cache_ttl: Duration,
+    is_ipv6_mapping_enabled: bool,
+    is_ipv6_forward_enabled: bool,
     //forwarder_cache: RwLock<HashMap<LowerName, ForwarderCacheRecord>>,
 }
 
@@ -92,7 +94,9 @@ impl TrspAuthority {
             router: Box::new(Iptables::new(None, false, options.dns_mock_router)),
             max_positive_ttl: Duration::from_secs(options.dns_positive_max_ttl),
             max_negative_ttl: Duration::from_secs(options.dns_negative_max_ttl),
-            max_record_lookup_cache_ttl: Duration::from_secs(options.dns_record_lookup_max_ttl)
+            max_record_lookup_cache_ttl: Duration::from_secs(options.dns_record_lookup_max_ttl),
+            is_ipv6_mapping_enabled: options.dns_enable_ipv6_mapping,
+            is_ipv6_forward_enabled: options.dns_enable_ipv6_forward,
             //forwarder_cache: RwLock::new(HashMap::with_capacity(FORWARDER_CACHE_SIZE)),
         };
         Ok(this)
@@ -124,6 +128,16 @@ impl TrspAuthority {
     pub async fn inner_lookup(&self, name: &LowerName, rtype: RecordType)
         -> Result<Lookup, ResolveError>
     {
+        match rtype {
+            RecordType::AAAA => {
+                if ! self.is_ipv6_mapping_enabled {
+                    warn!("Ipv6 mapping disabled: {} {}", name, rtype);
+                    return Err(ResolveError::from(ResolveErrorKind::NoConnections))
+                }
+            },
+            _ => (),
+        }
+
         let storage = self.inner_storage.read().await;
         let records_set = if let Some(r) = storage.find(&name, rtype) {
             r
@@ -451,10 +465,22 @@ impl Authority for TrspAuthority {
         rtype: RecordType,
         _lookup_options: LookupOptions,
     ) -> Result<Self::Lookup, LookupError> {
+
+        match rtype {
+            RecordType::AAAA => {
+                if ! self.is_ipv6_forward_enabled {
+                    warn!("Ipv6 forward disabled: {} {}", name, rtype);
+                    return Err(LookupError::ResponseCode(ResponseCode::NXDomain))
+                }
+            },
+            _ => (),
+        }
+
         // TODO: make this an error?
         debug_assert!(self.origin.zone_of(name));
 
         debug!("forwarding lookup: {} {}", name, rtype);
+
         let mapping_resolve = self.inner_lookup(&name, rtype).await;
         let resolve = if let Err(e) = mapping_resolve {
             match e.kind() {

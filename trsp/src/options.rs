@@ -12,8 +12,14 @@ pub struct Options {
     pub workdir: String,
 
     // DNS
-    #[clap(long = "dns-mock-router", action, env = "TRSP_DNS_MOCK_ROUTER")]
+    #[clap(long = "dns-mock-router", action, default_value="false", env = "TRSP_DNS_MOCK_ROUTER")]
     pub dns_mock_router: bool,
+
+    #[clap(long = "dns-enable-ipv6-mapping", default_value="false", action, env = "TRSP_DNS_ENABLE_IPV6_MAPPING")]
+    pub dns_enable_ipv6_mapping: bool,
+
+    #[clap(long = "dns-enable-ipv6-forward", default_value="false", action, env = "TRSP_DNS_ENABLE_IPV6_FORWARD")]
+    pub dns_enable_ipv6_forward: bool,
 
     #[clap(
         long,
