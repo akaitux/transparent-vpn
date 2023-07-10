@@ -7,10 +7,14 @@ pub struct Options {
     #[clap(short = 'd', long = "debug", action, env = "TRSP_DEBUG")]
     pub debug: bool,
 
+
     #[clap(short = 'w', long = "workdir", default_value="", env = "TRSP_WORKDIR")]
     pub workdir: String,
 
     // DNS
+    #[clap(long = "dns-mock-router", action, env = "TRSP_DNS_MOCK_ROUTER")]
+    pub dns_mock_router: bool,
+
     #[clap(
         long,
         default_value = "0.0.0.0:53",

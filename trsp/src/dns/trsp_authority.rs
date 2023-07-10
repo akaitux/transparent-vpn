@@ -89,7 +89,7 @@ impl TrspAuthority {
             inner_storage: RwLock::new(InnerStorage::new()),
             mapping_ipv4_subnet,
             available_ipv4_inner_ips: RwLock::new(VecDeque::from_iter(mapping_ipv4_subnet.hosts())),
-            router: Box::new(Iptables::new(None, false)),
+            router: Box::new(Iptables::new(None, false, options.dns_mock_router)),
             max_positive_ttl: Duration::from_secs(options.dns_positive_max_ttl),
             max_negative_ttl: Duration::from_secs(options.dns_negative_max_ttl),
             max_record_lookup_cache_ttl: Duration::from_secs(options.dns_record_lookup_max_ttl)
@@ -196,7 +196,7 @@ impl TrspAuthority {
 
         for record in record_set.records() {
             match record.mapped_addr {
-                IpAddr::V4(ip) => available_ipv4s.push_front(ip),
+                IpAddr::V4(ip) => available_ipv4s.push_back(ip),
                 IpAddr::V6(ip) => {
                     error!("update_record: IPV6 not supported: {}", ip);
                     return Err(ResolveError::from("update_record: IPV6 not supported"))
@@ -298,7 +298,20 @@ impl TrspAuthority {
 
         let mut inner_storage = self.inner_storage.write().await;
         let mut available_ipv4s = self.available_ipv4_inner_ips.write().await;
+
         self.add_records_to_record_set(&mut record_set, &lookup,  &mut available_ipv4s)?;
+
+        if let Err(e) = self.router.add_route(&record_set) {
+            error!("add_blocked_domain: Error while adding route '{:?}': {}", record_set, e);
+            for record in record_set.records() {
+                match record.mapped_addr {
+                    IpAddr::V4(a) => available_ipv4s.push_front(a),
+                    _ => {}
+                }
+            }
+            return Err(ResolveError::from("internal_error"))
+        }
+
         if let Err(e) = inner_storage.upsert(name, rtype, &record_set) {
             error!(
                 "Error while adding ProxyRecordSet to inner storage for domain '{}': {}",
@@ -313,10 +326,6 @@ impl TrspAuthority {
             return Err(ResolveError::from("error_while_push_records_set"))
         }
 
-        if let Err(e) = self.router.add_route(&record_set) {
-            error!("add_blocked_domain: Error while adding route '{:?}': {}", record_set, e);
-            return Err(ResolveError::from("internal_error"))
-        }
 
         Ok(self.build_lookup(name, rtype, &record_set))
     }

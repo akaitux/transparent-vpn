@@ -1,14 +1,15 @@
 use super::proxy_record::{ProxyRecordSet, ProxyRecord};
-use std::net::{Ipv4Addr, IpAddr};
+use std::borrow::Borrow;
+use std::net::{Ipv4Addr, IpAddr, Ipv6Addr};
 use std::str::FromStr;
-use std::time::Instant;
+use std::time::{Instant, Duration};
 use std::{
     io,
     error::Error
 };
 use std::process::{Command, Output};
 use lazy_static::lazy_static;
-use tracing::{error, debug};
+use tracing::{error, debug, info};
 use chrono::{DateTime, Utc};
 use regex::Regex;
 
@@ -18,6 +19,11 @@ lazy_static!{
         r"\S+\s+\S+\s+\S+\s+\S+\s+(\S+)\s+/\*(.+)\*/\s+to:(\S+)"
     ).unwrap();
 }
+
+macro_rules! vec_of_strings {
+    ($($x:expr),*) => (vec![$($x.to_string()),*]);
+}
+
 
 
 pub trait Router: Send + Sync {
@@ -32,11 +38,12 @@ pub trait Router: Send + Sync {
 pub struct Iptables {
     chain_name: String,
     disable_ipv6: bool,
+    mock_router: bool,
 }
 
 
 impl Iptables {
-    pub fn new(chain_name: Option<&str>, disable_ipv6: bool) -> Self {
+    pub fn new(chain_name: Option<&str>, disable_ipv6: bool, mock_router: bool) -> Self {
         let chain_name = if let Some(n) = chain_name {
             String::from(n)
         } else {
@@ -45,44 +52,55 @@ impl Iptables {
         Self {
             chain_name,
             disable_ipv6,
+            mock_router,
         }
     }
 
-    fn exec_ipv4(cmd: &[&str]) -> io::Result<Output> {
-        Command::new("iptables").args(cmd).output()
+    fn exec(&self, bin: &str, cmd: &[String]) -> Result<(), String> {
+        if self.mock_router {
+            info!("Iptables mocked exec: {}", cmd.join(" "));
+            return Ok(())
+        }
+        let output = Command::new(bin).args(cmd).output();
+        match output {
+            Ok(out) => {
+                let stdout = String::from_utf8(out.stdout.clone());
+                let stderr = String::from_utf8(out.stderr.clone());
+
+                if ! &out.stderr.is_empty() {
+                    if let Ok(e) = stderr {
+                        return Err(e)
+                    } else {
+                        return Err(format!("Error while parsing stderr. cmd: {:?}, stderr: {:?}", cmd, stderr))
+                    }
+                }
+                debug!("Exec cmd '{:?}': {:?}", cmd, stdout);
+            },
+            Err(e) => {
+                return Err(format!("Error while executing. cmd: {:?}, error: {}", cmd, e))
+            }
+        }
+        Ok(())
     }
 
-    fn exec_ipv6(cmd: &[&str]) -> io::Result<Output> {
-        Command::new("ip6tables").args(cmd).output()
+    fn exec_ipv4(&self, cmd: &[String]) -> Result<(), String> {
+        self.exec("iptables", cmd)
     }
 
-    fn generate_comments(domain: &str, resolved_at: &DateTime<Utc>) -> String {
-        let resolved_at = resolved_at.to_string().replace(" ", "_");
-        format!("{}:::{}", domain, resolved_at)
+
+    fn exec_ipv6(&self, cmd: &[String]) -> Result<(), String> {
+        self.exec("ip6tables", cmd)
+    }
+
+    fn generate_comment(record_set: &ProxyRecordSet) -> String {
+        let resolved_at = record_set.resolved_at.to_string().replace(" ", "_");
+        format!("{}:::{}", record_set.domain, resolved_at)
     }
 
     fn parse_comment(iptables_line: &str) -> Result<(ProxyRecord, String), String> {
         if iptables_line.is_empty() {
             return Err(String::from("empty"))
         }
-        //let split = iptables_line.replace("/to:", "");
-        //let split: Vec<&str> = split.split_whitespace().collect();
-        //if split.len() != 7 {
-        //    return Err(
-        //        format!(
-        //            "Error while parsing iptables line after split by whitespace: len != 7 \n{}\n{:?}",
-        //            iptables_line, split
-        //        ));
-        //}
-        //let original_addr = IpAddr::from_str(split[5]);
-        //let mapped_addr = IpAddr::from_str(split[6]);
-        //let comment = split.iter().find_map(|s| -> Option<&str> {
-        //    if s.starts_with("/*") && s.ends_with("*/") {
-        //        Some(s)
-        //    } else {
-        //        None
-        //    }
-        //});
         let regex_caps =  if let Some(caps) = IPTABLES_REGEX.captures(iptables_line) {
             caps
         } else {
@@ -108,18 +126,37 @@ impl Iptables {
         //}, domain))
        Err(String::from("uknown"))
     }
+
+    fn gen_add_del_rule(&self, record: &ProxyRecord, comment: &str, mode: &str) -> Vec<String> {
+        let mut cmd: Vec<String> = vec![];
+        if mode == "add" {
+            cmd.extend_from_slice(&vec_of_strings!["-A", self.chain_name])
+        } else if mode == "del" {
+            cmd.extend_from_slice(&vec_of_strings!["-D", self.chain_name])
+        } else {
+            panic!("gen_add_del_rule: wrong mode")
+        }
+        cmd.extend_from_slice(
+            &vec_of_strings!["-w", "-t", "nat", "-m", "comment", "--comment", comment]
+        );
+        cmd.extend_from_slice(
+           &vec_of_strings!["-d", record.mapped_addr, "-j", "DNAT", "--to", record.original_addr]
+        );
+        cmd
+    }
+
 }
 
 impl Router for Iptables {
     fn create_chain(&self) -> Result<(), String> {
-        let mut functions: Vec<fn(cmd: &[&str]) -> io::Result<Output>> = vec![
-            Iptables::exec_ipv4,
+        let mut functions: Vec<Box<dyn Fn(&[String]) -> Result<(), String> >> = vec![
+            Box::new(|cmd| {self.exec_ipv4(cmd)} ),
         ];
         if !self.disable_ipv6 {
-            functions.push(Iptables::exec_ipv6);
+            functions.push(Box::new(|cmd| {self.exec_ipv6(cmd)}));
         }
         for f in functions {
-            let res = f(&["-N", &self.chain_name, "-t", "nat"]);
+            let res = f(&vec_of_strings!["-N", &self.chain_name, "-t", "nat"]);
             match res {
                 Ok(_) => (),
                 Err(e) => {
@@ -127,7 +164,7 @@ impl Router for Iptables {
                         return Ok(())
                     }
                     return Err(e.to_string())
-                }
+                },
             }
         }
         Ok(())
@@ -135,11 +172,51 @@ impl Router for Iptables {
 
     fn add_route(&self, record_set: &ProxyRecordSet) -> Result<(), Box<dyn Error>> {
         debug!("ADD ROUTE: {:?}", record_set);
+        let comment = Iptables::generate_comment(record_set);
+        for record in record_set.records() {
+            let cmd = self.gen_add_del_rule(record, &comment, "add");
+            let output = match record.original_addr {
+                IpAddr::V4(_) => {self.exec_ipv4(&cmd)},
+                IpAddr::V6(_) => {self.exec_ipv6(&cmd)},
+            };
+            match output {
+                Ok(_) => {
+                    info!("Add route for domain '{}': {}", record_set.domain, cmd.join(" "));
+                },
+                Err(e) => {
+                    error!(
+                        "Error while adding route for domain '{}' ('{}'): {}",
+                        record_set.domain, cmd.join(" "), e
+                    );
+                    return Err(e.into())
+                }
+            }
+        }
         Ok(())
     }
 
     fn del_route(&self, record_set: &ProxyRecordSet) -> Result<(), Box<dyn Error>> {
         debug!("DEL ROUTE: {:?}", record_set);
+        let comment = Iptables::generate_comment(record_set);
+        for record in record_set.records() {
+            let cmd = self.gen_add_del_rule(record, &comment, "del");
+            let output = match record.original_addr {
+                IpAddr::V4(_) => {self.exec_ipv4(&cmd)},
+                IpAddr::V6(_) => {self.exec_ipv6(&cmd)},
+            };
+            match output {
+                Ok(_) => {
+                    info!("Delete route for domain '{}': '{}'", record_set.domain, cmd.join(" "));
+                },
+                Err(e) => {
+                    error!(
+                        "Error while deleting route for domain '{}' ('{}'): {}",
+                        record_set.domain, cmd.join(" "), e
+                    );
+                    return Err(e.into())
+                }
+            }
+        }
        Ok(())
     }
 
@@ -149,19 +226,19 @@ impl Router for Iptables {
     }
 
     fn cleanup(&self) -> Result<(), String> {
-        let mut functions: Vec<fn(cmd: &[&str]) -> io::Result<Output>> = vec![
-            Iptables::exec_ipv4,
+        let mut functions: Vec<Box<dyn Fn(&[String]) -> Result<(), String> >> = vec![
+            Box::new(|cmd| {self.exec_ipv4(cmd)} ),
         ];
         if !self.disable_ipv6 {
-            functions.push(Iptables::exec_ipv6);
+            functions.push(Box::new(|cmd| {self.exec_ipv6(cmd)}));
         }
         for f in functions {
-            let res = f(&["-F", &self.chain_name]);
+            let res = f(&vec_of_strings!["-F", &self.chain_name]);
             match res {
                 Ok(_) => (),
                 Err(e) => {
                     return Err(e.to_string())
-                }
+                },
             }
         }
         Ok(())
@@ -169,16 +246,24 @@ impl Router for Iptables {
 }
 
 #[test]
-fn test_iptables_generate_comments() {
-    let time = DateTime::from_str("2023-06-30 19:24:01.267193348 UTC").unwrap();
-    let comment = Iptables::generate_comments("some.domain", &time);
+fn test_iptables_generate_comment() {
+    let record_set = ProxyRecordSet::new(
+        "some.domain",
+        DateTime::from_str("2023-06-30 19:24:01.267193348 UTC").unwrap(),
+        Duration::from_secs(120),
+    );
+    let comment = Iptables::generate_comment(&record_set);
     assert_eq!(comment, "some.domain:::2023-06-30_19:24:01.267193348_UTC")
 }
 
 #[test]
 fn test_iptables_parse_comments() {
-    let time: DateTime<Utc> = DateTime::from_str("2023-06-30 19:24:01.267193348 UTC").unwrap();
-    let comment = Iptables::generate_comments("some.domain", &time);
+    let record_set = ProxyRecordSet::new(
+        "some.domain",
+        DateTime::from_str("2023-06-30 19:24:01.267193348 UTC").unwrap(),
+        Duration::from_secs(120),
+    );
+    let comment = Iptables::generate_comment(&record_set);
     let iptables_line = format!(
         "DNAT       0    --  0.0.0.0/0            10.0.0.2           /* {} */ to:10.0.0.3",
         comment,
