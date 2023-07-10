@@ -23,6 +23,10 @@ impl ProxyRecord {
     pub fn mark_for_cleanup(&mut self, at: Duration) {
         self.cleanup_at = Some(Utc::now() + chrono::Duration::from_std(at).unwrap());
     }
+
+    pub fn unmark_for_cleanup(&mut self) {
+        self.cleanup_at = None;
+    }
 }
 
 

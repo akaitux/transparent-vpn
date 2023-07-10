@@ -69,6 +69,7 @@ pub struct TrspAuthority {
     max_record_lookup_cache_ttl: Duration,
     is_ipv6_mapping_enabled: bool,
     is_ipv6_forward_enabled: bool,
+    cleanup_record_after_secs: Duration,
     //forwarder_cache: RwLock<HashMap<LowerName, ForwarderCacheRecord>>,
 }
 
@@ -99,6 +100,7 @@ impl TrspAuthority {
             max_record_lookup_cache_ttl: Duration::from_secs(options.dns_record_lookup_max_ttl),
             is_ipv6_mapping_enabled: options.dns_enable_ipv6_mapping,
             is_ipv6_forward_enabled: options.dns_enable_ipv6_forward,
+            cleanup_record_after_secs: Duration::from_secs(options.dns_cleanup_record_after_secs),
             //forwarder_cache: RwLock::new(HashMap::with_capacity(FORWARDER_CACHE_SIZE)),
         };
         Ok(this)
@@ -272,12 +274,12 @@ impl TrspAuthority {
             }
         }
 
-        // Mark old ips for cleanup
         for record in record_set.records_mut() {
             current_ips.push(record.original_addr);
-            if ! lookup_ips.contains(&record.original_addr) {
-                // TODO - add it in options
-                record.mark_for_cleanup(Duration::from_secs(60*60*24))
+            if lookup_ips.contains(&record.original_addr) {
+                record.unmark_for_cleanup()
+            } else {
+                record.mark_for_cleanup(self.cleanup_record_after_secs)
             }
         }
 
