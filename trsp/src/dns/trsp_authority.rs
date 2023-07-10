@@ -2,12 +2,12 @@ use std::{
     io,
     time::Instant,
     str::FromStr,
-    collections::{HashMap, VecDeque},
+    collections::VecDeque,
     sync::Arc,
     net::{Ipv4Addr, IpAddr},
 };
 
-use chrono::{DateTime, Utc};
+use chrono::Utc;
 use std::time::Duration;
 use ipnet::Ipv4Net;
 use tokio::sync::RwLock;
@@ -43,17 +43,6 @@ use super::{
     proxy_record::{ProxyRecordSet, ProxyRecord},
     router::{Router, Iptables}
 };
-
-
-//const FORWARDER_CACHE_SIZE: usize = 1000;
-//const FORWARDER_CACHE_MAX_TTL: usize = 5;
-
-
-//struct ForwarderCacheRecord {
-//    pub lookup: Lookup,
-//    pub resolved_at: Instant,
-//
-//}
 
 
 pub struct TrspAuthority {
@@ -206,48 +195,6 @@ impl TrspAuthority {
 
         let mut inner_storage = self.inner_storage.write().await;
         let mut available_ipv4s = self.available_ipv4_inner_ips.write().await;
-
-
-        // if let Err(e) = self.router.del_route(&record_set) {
-        //     error!("update_record: Error while deleting route '{:?}': {}", record_set, e);
-        //     return Err(ResolveError::from("internal_error"))
-        // }
-
-        // for record in record_set.records() {
-        //     match record.mapped_addr {
-        //         IpAddr::V4(ip) => available_ipv4s.push_back(ip),
-        //         IpAddr::V6(ip) => {
-        //             error!("update_record: IPV6 not supported: {}", ip);
-        //             return Err(ResolveError::from("update_record: IPV6 not supported"))
-        //         }
-        //     }
-        // }
-
-        // let mut record_set = ProxyRecordSet::new(
-        //     name.to_string().as_ref(),
-        //     lookup_time,
-        //     self.max_record_lookup_cache_ttl
-        // );
-
-        // self.add_records_to_record_set(&mut record_set, &lookup, &mut available_ipv4s)?;
-        // if let Err(e) = inner_storage.upsert(name, rtype, &record_set) {
-        //     error!(
-        //         "Error while updating ProxyRecordSet in inner storage for domain '{}': {}",
-        //         name, e
-        //     );
-        //     for record in record_set.records() {
-        //         match record.mapped_addr {
-        //             IpAddr::V4(a) => available_ipv4s.push_front(a),
-        //             _ => {}
-        //         }
-        //     }
-        //     return Err(ResolveError::from("error_while_push_records_set"))
-        // }
-
-        // if let Err(e) = self.router.add_route(&record_set) {
-        //     error!("update_record: Error while adding route '{:?}': {}", record_set, e);
-        //     return Err(ResolveError::from("internal_error"))
-        // }
 
         let mut record_set =  record_set.clone();
         record_set.resolved_at = lookup_time;
@@ -502,17 +449,6 @@ impl Authority for TrspAuthority {
                     self.forwarder.lookup(name.clone(), rtype).await
                 }
             }
-            // Add forwarder record to cache
-            //if let Ok(l) = resolve {
-            //    self.forwarder_cache.write().unwrap().insert(
-            //        name.clone(),
-            //        ForwarderCacheRecord {
-            //            lookup: l,
-            //            resolved_at: Instant::now(),
-
-            //        }
-            //    );
-            //}
         } else {
             mapping_resolve
         };
