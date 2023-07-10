@@ -93,8 +93,8 @@ impl Iptables {
     }
 
     fn generate_comment(record_set: &ProxyRecordSet) -> String {
-        let resolved_at = record_set.resolved_at.to_string().replace(" ", "_");
-        format!("{}:::{}", record_set.domain, resolved_at)
+        //let resolved_at = record_set.resolved_at.to_string().replace(" ", "_");
+        format!("{}", record_set.domain)
     }
 
     fn parse_comment(iptables_line: &str) -> Result<(ProxyRecord, String), String> {
@@ -127,15 +127,15 @@ impl Iptables {
        Err(String::from("uknown"))
     }
 
-    fn gen_add_del_rule(&self, record: &ProxyRecord, comment: &str, mode: &str) -> Vec<String> {
+    fn gen_rule(&self, record: &ProxyRecord, comment: &str, mode: &str) -> Vec<String> {
         let mut cmd: Vec<String> = vec![];
-        if mode == "add" {
-            cmd.extend_from_slice(&vec_of_strings!["-A", self.chain_name])
-        } else if mode == "del" {
-            cmd.extend_from_slice(&vec_of_strings!["-D", self.chain_name])
-        } else {
-            panic!("gen_add_del_rule: wrong mode")
+        match mode {
+            "add" =>  cmd.extend_from_slice(&vec_of_strings!["-A", self.chain_name]),
+            "check" => cmd.extend_from_slice(&vec_of_strings!["-C", self.chain_name]),
+            "del" =>  cmd.extend_from_slice(&vec_of_strings!["-D", self.chain_name]),
+            _ => panic!("gen_add_del_rule: wrong mode")
         }
+
         cmd.extend_from_slice(
             &vec_of_strings!["-w", "-t", "nat", "-m", "comment", "--comment", comment]
         );
@@ -174,15 +174,44 @@ impl Router for Iptables {
         debug!("ADD ROUTE: {:?}", record_set);
         let comment = Iptables::generate_comment(record_set);
         for record in record_set.records() {
-            let cmd = self.gen_add_del_rule(record, &comment, "add");
-            let output = match record.original_addr {
+            if let Some(_) = record.cleanup_at {
+                info!("Skip add route for record {:?}: cleanup_at not empty", record);
+                continue
+            }
+            let cmd = self.gen_rule(record, &comment, "check");
+            let check_output = match record.original_addr {
                 IpAddr::V4(_) => {self.exec_ipv4(&cmd)},
                 IpAddr::V6(_) => {self.exec_ipv6(&cmd)},
             };
+
+            // Check if record exists - returns Ok(), if not exists - returns error
+            let output = match check_output {
+                Ok(_) => {
+                    info!("Route for domain '{}' ({}) already exists, skip", record_set.domain, cmd.join(" "));
+                    continue
+                },
+                Err(e) => {
+                    if ! e.contains("does a matching rule exist in that chain?") {
+                        error!(
+                            "Error while check route for domain '{}' ('{}'): {}",
+                            record_set.domain, cmd.join(" "), e
+                        );
+                        return Err(e.into())
+                    }
+                    let cmd = self.gen_rule(record, &comment, "add");
+                    match record.original_addr {
+                        IpAddr::V4(_) => {self.exec_ipv4(&cmd)},
+                        IpAddr::V6(_) => {self.exec_ipv6(&cmd)},
+                    }
+                }
+            };
+
+
             match output {
                 Ok(_) => {
-                    info!("Add route for domain '{}': {}", record_set.domain, cmd.join(" "));
-                },
+                    info!("Add route for domain '{}' ({})", record_set.domain, cmd.join(" "));
+                    continue
+                }
                 Err(e) => {
                     error!(
                         "Error while adding route for domain '{}' ('{}'): {}",
@@ -199,7 +228,7 @@ impl Router for Iptables {
         debug!("DEL ROUTE: {:?}", record_set);
         let comment = Iptables::generate_comment(record_set);
         for record in record_set.records() {
-            let cmd = self.gen_add_del_rule(record, &comment, "del");
+            let cmd = self.gen_rule(record, &comment, "del");
             let output = match record.original_addr {
                 IpAddr::V4(_) => {self.exec_ipv4(&cmd)},
                 IpAddr::V6(_) => {self.exec_ipv6(&cmd)},

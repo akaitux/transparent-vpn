@@ -189,31 +189,121 @@ impl TrspAuthority {
         let mut inner_storage = self.inner_storage.write().await;
         let mut available_ipv4s = self.available_ipv4_inner_ips.write().await;
 
-        if let Err(e) = self.router.del_route(&record_set) {
-            error!("update_record: Error while deleting route '{:?}': {}", record_set, e);
-            return Err(ResolveError::from("internal_error"))
+
+        // if let Err(e) = self.router.del_route(&record_set) {
+        //     error!("update_record: Error while deleting route '{:?}': {}", record_set, e);
+        //     return Err(ResolveError::from("internal_error"))
+        // }
+
+        // for record in record_set.records() {
+        //     match record.mapped_addr {
+        //         IpAddr::V4(ip) => available_ipv4s.push_back(ip),
+        //         IpAddr::V6(ip) => {
+        //             error!("update_record: IPV6 not supported: {}", ip);
+        //             return Err(ResolveError::from("update_record: IPV6 not supported"))
+        //         }
+        //     }
+        // }
+
+        // let mut record_set = ProxyRecordSet::new(
+        //     name.to_string().as_ref(),
+        //     lookup_time,
+        //     self.max_record_lookup_cache_ttl
+        // );
+
+        // self.add_records_to_record_set(&mut record_set, &lookup, &mut available_ipv4s)?;
+        // if let Err(e) = inner_storage.upsert(name, rtype, &record_set) {
+        //     error!(
+        //         "Error while updating ProxyRecordSet in inner storage for domain '{}': {}",
+        //         name, e
+        //     );
+        //     for record in record_set.records() {
+        //         match record.mapped_addr {
+        //             IpAddr::V4(a) => available_ipv4s.push_front(a),
+        //             _ => {}
+        //         }
+        //     }
+        //     return Err(ResolveError::from("error_while_push_records_set"))
+        // }
+
+        // if let Err(e) = self.router.add_route(&record_set) {
+        //     error!("update_record: Error while adding route '{:?}': {}", record_set, e);
+        //     return Err(ResolveError::from("internal_error"))
+        // }
+
+        let mut record_set =  record_set.clone();
+        record_set.resolved_at = lookup_time;
+
+        let mut current_ips: Vec<IpAddr> = vec![];
+        let mut lookup_ips: Vec<IpAddr> = vec![];
+
+
+        // Build lookup_ips vec
+        for record in lookup.records() {
+            if !self.is_a_record_valid(record) {
+                continue
+            }
+            if let Some(data) = record.data() {
+                if let Some(ip) = data.to_ip_addr() {
+                    lookup_ips.push(ip)
+                } else {
+                    info!("Something wrong, record doesn't contain ip: {} ; {:?}", record.name(), record.data());
+                    continue
+                };
+            } else {
+                warn!("No data in dns reply: {:?}", record);
+                continue
+            }
         }
 
-        for record in record_set.records() {
-            match record.mapped_addr {
-                IpAddr::V4(ip) => available_ipv4s.push_back(ip),
-                IpAddr::V6(ip) => {
-                    error!("update_record: IPV6 not supported: {}", ip);
-                    return Err(ResolveError::from("update_record: IPV6 not supported"))
+        // Mark old ips for cleanup
+        for record in record_set.records_mut() {
+            current_ips.push(record.original_addr);
+            if ! lookup_ips.contains(&record.original_addr) {
+                // TODO - add it in options
+                record.mark_for_cleanup(Duration::from_secs(60*60*24))
+            }
+        }
+
+        // Create records for new adresses
+        for lookup_ip in lookup_ips {
+            if ! current_ips.contains(&lookup_ip) {
+                let mapped_ip: Ipv4Addr = if let Some(ip) = available_ipv4s.pop_front() {
+                    ip.into()
+                } else {
+                    error!("Mapped ip set is empty");
+                    return Err(ResolveError::from("Mapped ip set is empty"))
+                };
+                let proxy_record = ProxyRecord::new(
+                    lookup_ip,
+                    mapped_ip.into(),
+                );
+
+                if let Err(e) = record_set.push(&proxy_record) {
+                    error!(
+                        "Record already exists ({}): r: {:?}, set: {:?}",
+                        e, proxy_record, record_set,
+                    );
+                    available_ipv4s.push_front(mapped_ip);
+                    continue
                 }
             }
         }
 
-        let mut record_set = ProxyRecordSet::new(
-            name.to_string().as_ref(),
-            lookup_time,
-            self.max_record_lookup_cache_ttl
-        );
+        if let Err(e) = self.router.add_route(&record_set) {
+            error!("add_blocked_domain: Error while adding route '{:?}': {}", record_set, e);
+            for record in record_set.records() {
+                match record.mapped_addr {
+                    IpAddr::V4(a) => available_ipv4s.push_front(a),
+                    _ => {}
+                }
+            }
+            return Err(ResolveError::from("internal_error"))
+        }
 
-        self.add_records_to_record_set(&mut record_set, &lookup, &mut available_ipv4s)?;
         if let Err(e) = inner_storage.upsert(name, rtype, &record_set) {
             error!(
-                "Error while updating ProxyRecordSet in inner storage for domain '{}': {}",
+                "Error while adding ProxyRecordSet to inner storage for domain '{}': {}",
                 name, e
             );
             for record in record_set.records() {
@@ -223,11 +313,6 @@ impl TrspAuthority {
                 }
             }
             return Err(ResolveError::from("error_while_push_records_set"))
-        }
-
-        if let Err(e) = self.router.add_route(&record_set) {
-            error!("update_record: Error while adding route '{:?}': {}", record_set, e);
-            return Err(ResolveError::from("internal_error"))
         }
 
         Ok(self.build_lookup(name, rtype, &record_set))

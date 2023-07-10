@@ -12,11 +12,16 @@ use trust_dns_server::proto::rr::{Record, RecordType, RData};
 pub struct ProxyRecord {
     pub original_addr: IpAddr,
     pub mapped_addr: IpAddr,
+    pub cleanup_at: Option<DateTime<Utc>>,
 }
 
 impl ProxyRecord {
     pub fn new(original_addr: IpAddr, mapped_addr: IpAddr) -> Self {
-        Self {original_addr, mapped_addr}
+        Self {original_addr, mapped_addr, cleanup_at: None}
+    }
+
+    pub fn mark_for_cleanup(&mut self, at: Duration) {
+        self.cleanup_at = Some(Utc::now() + chrono::Duration::from_std(at).unwrap());
     }
 }
 
@@ -40,8 +45,21 @@ impl ProxyRecordSet {
         }
     }
 
+    pub fn remove_record(&mut self, record: &ProxyRecord) {
+        let index = self.records.iter().position(
+            |x| x.original_addr == record.original_addr && x.mapped_addr == record.mapped_addr
+        );
+        if let Some(i) = index {
+            self.records.remove(i);
+        }
+    }
+
     pub fn records(&self) -> &Vec<ProxyRecord> {
         return &self.records
+    }
+
+    pub fn records_mut(&mut self) -> &mut Vec<ProxyRecord> {
+        return &mut self.records
     }
 
     pub fn push(&mut self, record: &ProxyRecord) -> Result<(), Box<dyn Error>> {
