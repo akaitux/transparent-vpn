@@ -1,16 +1,11 @@
 use super::proxy_record::{ProxyRecordSet, ProxyRecord};
-use std::borrow::Borrow;
-use std::net::{Ipv4Addr, IpAddr, Ipv6Addr};
-use std::str::FromStr;
-use std::time::{Instant, Duration};
+use std::net::IpAddr;
 use std::{
-    io,
-    error::Error
+    error::Error,
+    process::Command
 };
-use std::process::{Command, Output};
 use lazy_static::lazy_static;
 use tracing::{error, debug, info};
-use chrono::{DateTime, Utc};
 use regex::Regex;
 
 

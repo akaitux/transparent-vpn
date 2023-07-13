@@ -6,15 +6,18 @@ mod web_server;
 use clap::Parser;
 use std::{
     error::Error,
-    process,
     env,
     fs,
-    path::PathBuf,
+    path::PathBuf, sync::Arc,
 };
 
 
 use tracing_subscriber::{filter, prelude::*};
-use tracing::{info, error};
+use tracing::info;
+use tokio::{
+    signal::unix::{signal, SignalKind},
+    sync::Mutex,
+};
 
 
 
@@ -93,8 +96,9 @@ async fn main() -> Result<(), Box<dyn Error>> {
     // };
 
     let dns_workdir = workdir.join("dns");
-    let mut dns_server = dns::server::DnsServer::new(&options, &dns_workdir);
-    let dns_handler = match dns_server.start().await {
+    let dns_server_arc = Arc::new(Mutex::new(dns::server::DnsServer::new(&options, &dns_workdir)));
+    let dns_server = dns_server_arc.clone();
+    let dns_handler = match dns_server.lock().await.start().await {
         Ok(dns_handler) => dns_handler,
         Err(err) => {
             println!("DNS server start failed: {:?}", err);
@@ -110,6 +114,25 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
     let web_server = web_server::server::WebServer::new(&options);
     let web_handler = web_server.start().await.expect("Web server init failed");
+
+    let dns_server = dns_server_arc.clone();
+    tokio::spawn(async move {
+        let mut s_hangup = signal(SignalKind::hangup()).unwrap();
+
+        loop {
+            tokio::select! {
+                _ = s_hangup.recv() =>  {
+                    let mut dns_server = dns_server.lock().await;
+                    if let Err(e) = dns_server.reload().await {
+                        println!("Error while reload: {}", e)
+                    } else {
+                        println!("Reload successfull")
+                    }
+                }
+            }
+        }
+
+    });
 
     tokio::select!  {
         res = web_handler => {
@@ -134,7 +157,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
                     std::process::exit(1);
                 }
             }
-        }
+        },
     }
     // TODO: Обработка ошибок от tokio
     Ok(())

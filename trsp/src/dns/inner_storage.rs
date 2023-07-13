@@ -2,7 +2,6 @@ use std::{
     error::Error,
     collections::HashMap,
     sync::Arc,
-    net::IpAddr,
 };
 
 
@@ -14,7 +13,7 @@ use super::proxy_record::ProxyRecordSet;
 #[derive(Default)]
 pub struct InnerStorage {
     records: HashMap<RrKey, Arc<ProxyRecordSet>>,
-    internal_ip_to_record: HashMap<IpAddr, RrKey>,
+    // internal_ip_to_record: HashMap<IpAddr, RrKey>,
 }
 
 impl InnerStorage {
@@ -22,7 +21,7 @@ impl InnerStorage {
     pub fn new() -> Self {
         Self {
             records: HashMap::new(),
-            internal_ip_to_record: HashMap::new(),
+            // internal_ip_to_record: HashMap::new(),
         }
     }
 

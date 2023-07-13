@@ -3,7 +3,6 @@ use std::{
     error::Error, time::Duration,
 };
 use chrono::{DateTime, Utc};
-use std::time::Instant;
 use tracing::error;
 
 use trust_dns_server::proto::rr::{Record, RecordType, RData};

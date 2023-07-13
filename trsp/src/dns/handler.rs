@@ -4,10 +4,10 @@ use crate::options::Options;
 use trust_dns_server::{
     proto::op::{Header, OpCode, MessageType, ResponseCode},
     server::{Request, RequestHandler, ResponseHandler, ResponseInfo},
-    store::forwarder::{ForwardAuthority, ForwardConfig},
+    store::forwarder::ForwardConfig,
     client::rr::{LowerName, Name},
     resolver::config::{NameServerConfigGroup, ResolverOpts},
-    authority::{Catalog, ZoneType},
+    authority::Catalog,
 };
 use tracing::error;
 

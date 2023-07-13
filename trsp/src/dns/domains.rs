@@ -11,13 +11,12 @@ use std::ops::{Deref, DerefMut};
 
 
 const DEFAULT_DOMAINS_HASHSET_CAP: usize = 2_000_000;
-const DEFAULT_NXDOMAINS_HASHSET_CAP: usize = 500_000;
+// const DEFAULT_NXDOMAINS_HASHSET_CAP: usize = 500_000;
 
 
 #[derive(Clone, Debug)]
 pub struct Domain {
     domain: String,
-    is_regex: bool
 }
 
 impl Display for Domain {
@@ -60,14 +59,8 @@ impl Borrow<str> for Domain {
 
 impl Domain {
     pub fn new<S: Into<String>>(domain: S) -> Self {
-        let mut is_regex = false;
-        let domain = domain.into();
-        if domain.contains("*") {
-            is_regex = true;
-        };
         Domain {
-            domain,
-            is_regex,
+            domain: domain.into(),
         }
     }
 

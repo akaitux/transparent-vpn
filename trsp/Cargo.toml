@@ -7,7 +7,7 @@ build = "build.rs"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 [dependencies]
-tokio = { version = "1.21", features = ["rt-multi-thread", "macros"]}
+tokio = { version = "1.21", features = ["rt-multi-thread", "macros", "signal"]}
 tokio-stream = "0.1"
 config = "0.13"
 serde = "1.0"

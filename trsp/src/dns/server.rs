@@ -13,28 +13,27 @@ use trust_dns_server::{
 use reqwest::Url;
 use std::str::FromStr;
 
-use ipnet::Ipv4Net;
-
 use super::domains_set::{ArcDomainsSet, DomainsSet};
 
 
-pub struct DnsServer<'a> {
-    options: &'a Options,
-    workdir: &'a PathBuf,
+pub struct DnsServer {
+    options: Options,
+    workdir: PathBuf,
     domains_set: Option<ArcDomainsSet>,
 }
 
-impl<'a> DnsServer<'a> {
-    pub fn new(options: &'a Options, workdir: &'a PathBuf) -> Self {
+
+impl<'a> DnsServer {
+    pub fn new(options: &Options, workdir: &PathBuf) -> Self {
         Self {
-            options,
-            workdir,
+            options: options.clone(),
+            workdir: workdir.clone(),
             domains_set: None,
         }
     }
 
     fn create_domains_set(&self) -> Result<DomainsSet, Box<dyn Error>> {
-        let mut domains_set = DomainsSet::new(self.workdir);
+        let mut domains_set = DomainsSet::new(&self.workdir);
         domains_set.zapret_domains_csv_url = Some(Url::from_str(
             self.options.dns_zapret_blocked_domains_csv.as_str()
         )?);
@@ -76,6 +75,14 @@ impl<'a> DnsServer<'a> {
         let dns_join = tokio::spawn(server.block_until_done());
 
         Ok(dns_join)
+    }
+
+    pub async fn reload(&mut self) -> Result<(), Box<dyn Error>> {
+        if let Some(domains_set) = &self.domains_set {
+            domains_set.clear().await;
+            domains_set.import_domains().await?;
+        }
+        Ok(())
     }
 
     // pub async fn import_domains(&mut self) -> Result<(), Box<dyn Error>> {

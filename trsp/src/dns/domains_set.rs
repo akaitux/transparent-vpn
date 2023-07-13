@@ -55,6 +55,12 @@ impl DomainsSet {
         }
     }
 
+    pub async fn clear(&self) {
+        self.included_domains.write().await.clear();
+        self.excluded_domains.write().await.clear();
+        self.imported_domains.write().await.clear();
+    }
+
     pub async fn is_domain_blocked(&self, name: &str) -> bool {
         let name = name.trim_end_matches(".");
         if DomainsSet::is_domain_in_domains(name, &self.excluded_domains).await  {
