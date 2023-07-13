@@ -326,6 +326,17 @@ impl TrspAuthority {
         Ok(())
     }
 
+    async fn forwarder_lookup(&self, name: LowerName, rtype: RecordType) -> Result<Lookup, ResolveError> {
+        match self.forwarder.lookup(name, rtype).await {
+            Ok(l) => {
+                Ok(Lookup::new_with_deadline(l.query().clone(), Arc::from(l.records()), l.valid_until()))
+            },
+            Err(e) => {
+               Err(e)
+            }
+        }
+    }
+
     pub async fn add_blocked_domain(&self, name: &LowerName, rtype: RecordType)
         -> Result<Lookup, ResolveError>
     {
@@ -440,13 +451,15 @@ impl Authority for TrspAuthority {
                     if self.domains_set.is_domain_blocked(name.to_string().as_ref()).await {
                         self.add_blocked_domain(name, rtype).await
                     } else {
-                        self.forwarder.lookup(name.clone(), rtype).await
+                        // self.forwarder.lookup(name.clone(), rtype).await
+                        self.forwarder_lookup(name.clone(), rtype).await
                     }
 
                 }
                 _ => {
                     error!("Error while resolving with internal storage: {}", e);
-                    self.forwarder.lookup(name.clone(), rtype).await
+                    //self.forwarder.lookup(name.clone(), rtype).await
+                    self.forwarder_lookup(name.clone(), rtype).await
                 }
             }
         } else {

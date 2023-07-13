@@ -158,7 +158,7 @@ impl Router for Iptables {
                     if e.to_string().contains("Chain already exists") {
                         return Ok(())
                     }
-                    return Err(e.to_string())
+                    return Err(format!("create_chain: {}", e.to_string()).into())
                 },
             }
         }
@@ -261,7 +261,10 @@ impl Router for Iptables {
             match res {
                 Ok(_) => (),
                 Err(e) => {
-                    return Err(e.to_string())
+                    if e.contains("No chain") {
+                        return Ok(())
+                    }
+                    return Err(format!("cleanup: {}", e.to_string()).into())
                 },
             }
         }
