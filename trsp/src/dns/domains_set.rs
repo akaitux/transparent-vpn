@@ -5,7 +5,6 @@ use std::{
     env,
     fs,
     time::Instant,
-    mem,
 };
 use tracing::{debug, info, error, warn};
 use tokio_stream::StreamExt;
@@ -16,7 +15,7 @@ use lazy_static::lazy_static;
 use regex::Regex;
 use super::domains::{Domains, Domain};
 use tokio::{
-    io::{BufReader, AsyncBufReadExt},
+    io::{BufReader, AsyncBufReadExt, BufWriter, AsyncWriteExt},
     sync::RwLock,
     fs::File,
 };
@@ -106,7 +105,34 @@ impl DomainsSet {
         false
     }
 
+    pub async fn save_included_domains(&self) -> Result<(), Box<dyn Error>> {
+        // TODO: Tests
+        let filepath = self.workdir.join(INCLUDED_DOMAINS_FILENAME);
+        self.write_txt_domains_file(&filepath, &self.included_domains).await
+    }
+
+    pub async fn save_excluded_domains(&self) -> Result<(), Box<dyn Error>> {
+        // TODO: Tests
+        let filepath = self.workdir.join(EXCLUDED_DOMAINS_FILENAME);
+        self.write_txt_domains_file(&filepath, &self.excluded_domains).await
+    }
+
+    async fn write_txt_domains_file(
+        &self,
+        filepath: &PathBuf,
+        domains: &RwLock<Domains>
+    ) -> Result<(), Box<dyn Error>>
+    {
+        let file = File::open(filepath).await?;
+        let mut bufwriter = BufWriter::new(file);
+        for domain in domains.read().await.iter() {
+            bufwriter.write(domain.as_str().as_bytes()).await?;
+        }
+        Ok(())
+    }
+
     async fn load_included_domains(&self) -> Result<(), Box<dyn Error>> {
+        // TODO: Tests
         let filepath = self.workdir.join(INCLUDED_DOMAINS_FILENAME);
         let domains = self.read_txt_domains_file(&filepath).await?;
         let mut included_domains = self.included_domains.write().await;
@@ -115,6 +141,7 @@ impl DomainsSet {
     }
 
     async fn load_excluded_domains(&self) -> Result<(), Box<dyn Error>> {
+        // TODO: Tests
         let filepath = self.workdir.join(EXCLUDED_DOMAINS_FILENAME);
         let domains = self.read_txt_domains_file(&filepath).await?;
         let mut excluded_domains = self.excluded_domains.write().await;
