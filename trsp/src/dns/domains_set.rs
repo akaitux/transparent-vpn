@@ -208,7 +208,7 @@ impl DomainsSet {
 
     async fn load_domains_from_cache(
         &self,
-        domains: &RwLock<Domains>,
+        domains: &mut Domains,
         cache_filepath: &PathBuf
     )  -> Result<(), Box<dyn Error>>
     {
@@ -216,7 +216,7 @@ impl DomainsSet {
             "Load domains from cache file: {}",
             &cache_filepath.as_path().as_display(),
         );
-        return domains.write().await.read_from_file(cache_filepath).await
+        return domains.read_from_file(cache_filepath).await
 
     }
 
@@ -229,14 +229,13 @@ impl DomainsSet {
             return Err("No zapret_domains_csv_url".into())
         };
         let cache_filepath = self.workdir.join(ZAPRET_DOMAINS_TMP_FILENAME);
-        let response = reqwest::get(url.clone()).await;
 
-
-        let response = match response {
+        let response = match reqwest::get(url.clone()).await {
             Ok(r) => r,
             Err(err) => {
                 error!("Load domains error: {}", err);
-                return self.load_domains_from_cache(&self.imported_domains, &cache_filepath).await
+                let mut domains = self.imported_domains.write().await;
+                return self.load_domains_from_cache(&mut *domains, &cache_filepath).await
             }
         };
 
@@ -244,7 +243,8 @@ impl DomainsSet {
             Ok(_) => debug!("Reqwest get OK: {} {}", url, response.status()),
             Err(err) => {
                 error!("Load domains error: {}", err);
-                return self.load_domains_from_cache(&self.imported_domains, &cache_filepath).await
+                let mut domains = self.imported_domains.write().await;
+                return self.load_domains_from_cache(&mut *domains, &cache_filepath).await
             }
         };
 
@@ -293,7 +293,16 @@ impl DomainsSet {
         Ok(())
     }
 
+    async fn remove_nx_domains_from_imported(&self, nx_domains: &Domains) -> Result<(), Box<dyn Error>> {
+        let mut imported_domains = self.imported_domains.write().await;
+        for domain in nx_domains.iter() {
+            imported_domains.remove(domain.as_str());
+        }
+        Ok(())
+    }
+
     pub async fn download_zapret_nxdomains(&self ) -> Result<(), Box<dyn Error>> {
+        let mut cached_domains = Domains::new(None);
         let cache_filepath = self.workdir.join(ZAPRET_NXDOMAINS_TMP_FILENAME);
 
         let url = if let Some(u) = &self.zapret_nxdomains_txt_url {
@@ -302,7 +311,16 @@ impl DomainsSet {
             return Err("No zapret_nxdomains_txt_url".into())
         };
 
-        let response = reqwest::get(url.clone()).await?;
+
+        let response = match reqwest::get(url.clone()).await {
+            Ok(r) => r,
+            Err(err) => {
+                error!("Load nxdomains error: {}", err);
+                self.load_domains_from_cache(&mut cached_domains, &cache_filepath).await?;
+                return self.remove_nx_domains_from_imported(&cached_domains).await
+            }
+        };
+
         match response.error_for_status_ref() {
             Ok(_) => debug!("Reqwest get OK: {} {}", url, response.status()),
             Err(err) => {
@@ -311,25 +329,28 @@ impl DomainsSet {
                     "Load nxdomains from cache file: {}",
                     &cache_filepath.as_path().as_display()
                 );
-                return self.imported_domains.write().await.read_from_file(&cache_filepath).await
+                self.load_domains_from_cache(&mut cached_domains, &cache_filepath).await?;
+                return self.remove_nx_domains_from_imported(&cached_domains).await
             }
         };
 
         let mut buf: Vec<u8> = Vec::with_capacity(100);
         let mut stream = response.bytes_stream();
-        let mut imported_domains = self.imported_domains.write().await;
         while let Some(chunk) = stream.next().await {
             for byte in chunk? {
                 if byte == b'\n' {
                     let line = String::from_utf8(buf.clone())?;
                     let domain_s = prepare_domain_name(&line);
-                    imported_domains.remove(&domain_s);
+                    cached_domains.insert(Domain::new(domain_s));
                     buf.clear();
                 } else {
                     buf.push(byte);
                 }
             }
         }
+
+        self.remove_nx_domains_from_imported(&cached_domains).await?;
+        let imported_domains = self.imported_domains.write().await;
         imported_domains.write_to_file(&cache_filepath).await?;
         info!(
             "Download nxdomains txt file completed: {}",
