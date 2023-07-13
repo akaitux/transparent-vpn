@@ -1,9 +1,12 @@
-use std::error::Error;
-use std::path::PathBuf;
-use std::sync::Arc;
-use std::env;
-use std::time::Instant;
-use tokio::sync::RwLock;
+use std::{
+    error::Error,
+    path::{Path, PathBuf},
+    sync::Arc,
+    env,
+    fs,
+    time::Instant,
+    mem,
+};
 use tracing::{debug, info, error, warn};
 use tokio_stream::StreamExt;
 use reqwest::Url;
@@ -12,10 +15,17 @@ use encoding_rs::WINDOWS_1251;
 use lazy_static::lazy_static;
 use regex::Regex;
 use super::domains::{Domains, Domain};
+use tokio::{
+    io::{BufReader, AsyncBufReadExt},
+    sync::RwLock,
+    fs::File,
+};
 
 
 const ZAPRET_DOMAINS_TMP_FILENAME: &str = "_trsp_zapret_domains";
 const ZAPRET_NXDOMAINS_TMP_FILENAME: &str = "_trsp_zapret_nxdomains";
+const INCLUDED_DOMAINS_FILENAME: &str = "included_domains.txt";
+const EXCLUDED_DOMAINS_FILENAME: &str = "excluded_domains.txt";
 
 
 lazy_static! {
@@ -36,19 +46,14 @@ pub struct DomainsSet {
 
 impl DomainsSet {
     pub fn new(workdir: &PathBuf) -> Self {
-        let mut d = DomainsSet {
+        DomainsSet {
             included_domains: RwLock::new(Domains::new(None)),
             excluded_domains: RwLock::new(Domains::new(None)),
             imported_domains: RwLock::new(Domains::new(None)),
             workdir: workdir.clone(),
             zapret_domains_csv_url: None,
             zapret_nxdomains_txt_url: None,
-        };
-
-        let mut domains = Domains::new(None);
-        domains.set("test.akaitux.ru");
-        d.included_domains = RwLock::new(domains);
-        d
+        }
     }
 
     pub async fn is_domain_blocked(&self, name: &str) -> bool {
@@ -101,7 +106,41 @@ impl DomainsSet {
         false
     }
 
+    async fn load_included_domains(&self) -> Result<(), Box<dyn Error>> {
+        let filepath = self.workdir.join(INCLUDED_DOMAINS_FILENAME);
+        let domains = self.read_txt_domains_file(&filepath).await?;
+        let mut included_domains = self.included_domains.write().await;
+        *included_domains = domains;
+        Ok(())
+    }
+
+    async fn load_excluded_domains(&self) -> Result<(), Box<dyn Error>> {
+        let filepath = self.workdir.join(EXCLUDED_DOMAINS_FILENAME);
+        let domains = self.read_txt_domains_file(&filepath).await?;
+        let mut excluded_domains = self.excluded_domains.write().await;
+        *excluded_domains = domains;
+        Ok(())
+    }
+
+    async fn read_txt_domains_file(&self, filepath: &PathBuf) -> Result<Domains, Box<dyn Error>>  {
+        let mut domains = Domains::new(None);
+        let path = Path::new(filepath);
+        if ! path.exists() {
+            fs::File::create(path)?;
+            return Ok(Domains::new(None))
+        }
+        let file = File::open(path).await?;
+        let mut lines = BufReader::new(file).lines();
+        while let Some(line) = lines.next_line().await? {
+            let domain = Domain::new(line);
+            domains.insert(domain);
+        }
+        Ok(domains)
+    }
+
     pub async fn import_domains(&self) -> Result<(), Box<dyn Error>> {
+        self.load_included_domains().await?;
+        self.load_excluded_domains().await?;
         let tmp_dir = env::temp_dir();
         debug!("Temp dir for downloads is {}", tmp_dir.as_path().as_display());
 
