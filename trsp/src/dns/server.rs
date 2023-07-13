@@ -4,14 +4,20 @@ use tokio::{
     task::JoinHandle,
     net::{TcpListener, UdpSocket},
 };
-use std::{error::Error, path::PathBuf, sync::Arc};
-use std::time::Duration;
+use std::{
+    error::Error,
+    path::PathBuf,
+    sync::Arc,
+    time::Duration,
+    str::FromStr,
+};
 use trust_dns_server::{
     server::ServerFuture,
     proto::error::ProtoError,
 };
 use reqwest::Url;
-use std::str::FromStr;
+
+use tracing::error;
 
 use super::domains_set::{ArcDomainsSet, DomainsSet};
 
@@ -53,7 +59,9 @@ impl<'a> DnsServer {
         let domains_set = Arc::new(self.create_domains_set()?);
         self.domains_set = Some(domains_set.clone());
 
-        domains_set.import_domains().await?;
+        if let Err(e) = domains_set.import_domains().await {
+            error!("Error while loading blocked domains data: {}", e)
+        }
 
         let handler = Handler::new(&self.options, domains_set)?;
 
@@ -80,7 +88,9 @@ impl<'a> DnsServer {
     pub async fn reload(&mut self) -> Result<(), Box<dyn Error>> {
         if let Some(domains_set) = &self.domains_set {
             domains_set.clear().await;
-            domains_set.import_domains().await?;
+            if let Err(e) = domains_set.import_domains().await {
+                error!("Error while loading blocked domains data: {}", e);
+            }
         }
         Ok(())
     }

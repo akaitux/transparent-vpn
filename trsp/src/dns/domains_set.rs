@@ -6,6 +6,7 @@ use std::{
     fs,
     time::Instant,
 };
+use poem::http::response;
 use tracing::{debug, info, error, warn};
 use tokio_stream::StreamExt;
 use reqwest::Url;
@@ -172,23 +173,51 @@ impl DomainsSet {
     }
 
     pub async fn import_domains(&self) -> Result<(), Box<dyn Error>> {
-        self.load_included_domains().await?;
-        self.load_excluded_domains().await?;
+        let mut err: Vec<String> = vec![];
+        if let Err(e) = self.load_included_domains().await {
+            err.push(e.to_string());
+        }
+        if let Err(e) = self.load_excluded_domains().await {
+            err.push(e.to_string());
+        }
         let tmp_dir = env::temp_dir();
         debug!("Temp dir for downloads is {}", tmp_dir.as_path().as_display());
 
         let start = Instant::now();
         self.download_zapret_csv_domains().await?;
+        if let Err(e) = self.download_zapret_csv_domains().await {
+            err.push(e.to_string());
+        }
         let duration = start.elapsed();
         info!("Domains load time: {:?}", duration);
 
         if let Some(_) = &self.zapret_nxdomains_txt_url {
             let start = Instant::now();
             self.download_zapret_nxdomains().await?;
+            if let Err(e) = self.download_zapret_nxdomains().await {
+                err.push(e.to_string());
+            }
             let duration = start.elapsed();
             info!("NXDomains load time: {:?}", duration);
         }
+        if ! err.is_empty() {
+            return Err(err.join(". ").into())
+        }
         return Ok(())
+    }
+
+    async fn load_domains_from_cache(
+        &self,
+        domains: &RwLock<Domains>,
+        cache_filepath: &PathBuf
+    )  -> Result<(), Box<dyn Error>>
+    {
+        warn!(
+            "Load domains from cache file: {}",
+            &cache_filepath.as_path().as_display(),
+        );
+        return domains.write().await.read_from_file(cache_filepath).await
+
     }
 
     // Update self.domains from downloaded csv list
@@ -200,17 +229,22 @@ impl DomainsSet {
             return Err("No zapret_domains_csv_url".into())
         };
         let cache_filepath = self.workdir.join(ZAPRET_DOMAINS_TMP_FILENAME);
-        let response = reqwest::get(url.clone()).await?;
+        let response = reqwest::get(url.clone()).await;
+
+
+        let response = match response {
+            Ok(r) => r,
+            Err(err) => {
+                error!("Load domains error: {}", err);
+                return self.load_domains_from_cache(&self.imported_domains, &cache_filepath).await
+            }
+        };
 
         match response.error_for_status_ref() {
             Ok(_) => debug!("Reqwest get OK: {} {}", url, response.status()),
             Err(err) => {
                 error!("Load domains error: {}", err);
-                warn!(
-                    "Load domains from cache file: {}",
-                    &cache_filepath.as_path().as_display(),
-                );
-                return self.imported_domains.write().await.read_from_file(&cache_filepath).await
+                return self.load_domains_from_cache(&self.imported_domains, &cache_filepath).await
             }
         };
 
@@ -259,7 +293,6 @@ impl DomainsSet {
         Ok(())
     }
 
-    // Update self.domains from downloaded txt list
     pub async fn download_zapret_nxdomains(&self ) -> Result<(), Box<dyn Error>> {
         let cache_filepath = self.workdir.join(ZAPRET_NXDOMAINS_TMP_FILENAME);
 
