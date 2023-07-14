@@ -121,7 +121,7 @@ pub struct Options {
 
     #[clap(
         long,
-        default_value = "10",
+        default_value = "30",
         env = "TRSP_DNS_RECORD_LOOKUP_MAX_TTL")
     ]
     pub dns_record_lookup_max_ttl: u64,

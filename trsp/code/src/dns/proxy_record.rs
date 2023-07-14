@@ -7,16 +7,22 @@ use tracing::error;
 
 use trust_dns_server::proto::rr::{Record, RecordType, RData};
 
-#[derive(Eq, PartialEq, Debug, Hash, Clone)]
+#[derive(Eq, PartialEq, Debug, Clone)]
 pub struct ProxyRecord {
     pub original_addr: IpAddr,
     pub mapped_addr: IpAddr,
+    pub record: Record,
     pub cleanup_at: Option<DateTime<Utc>>,
 }
 
 impl ProxyRecord {
-    pub fn new(original_addr: IpAddr, mapped_addr: IpAddr) -> Self {
-        Self {original_addr, mapped_addr, cleanup_at: None}
+    pub fn new(original_addr: IpAddr, mapped_addr: IpAddr, record: &Record) -> Self {
+        Self {
+            original_addr,
+            mapped_addr,
+            cleanup_at: None,
+            record: record.clone(),
+        }
     }
 
     pub fn mark_for_cleanup(&mut self, at: Duration) {
@@ -29,7 +35,7 @@ impl ProxyRecord {
 }
 
 
-#[derive(Eq, PartialEq, Debug, Hash, Clone)]
+#[derive(Eq, PartialEq, Debug, Clone)]
 pub struct ProxyRecordSet {
     pub domain: String,
     records: Vec<ProxyRecord>,
@@ -123,6 +129,8 @@ impl ProxyRecordSet {
             let mut r = Record::new();
 
             r.set_ttl(self.calculate_ttl(&r));
+            r.set_name(pr.record.name().clone());
+            r.set_dns_class(pr.record.dns_class().clone());
 
             if let IpAddr::V4(ip) = pr.mapped_addr {
                 r.set_record_type(RecordType::A);

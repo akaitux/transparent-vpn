@@ -162,7 +162,6 @@ impl TrspAuthority {
         let mut query = Query::new();
         query.set_name(Name::from(name));
         query.set_query_type(rtype);
-
         Lookup::new_with_deadline(
             query,
             Arc::from(records_set.records_for_response()),
@@ -231,27 +230,38 @@ impl TrspAuthority {
         }
 
         // Create records for new adresses
-        for lookup_ip in lookup_ips {
-            if ! current_ips.contains(&lookup_ip) {
-                let mapped_ip: Ipv4Addr = if let Some(ip) = available_ipv4s.pop_front() {
-                    ip.into()
-                } else {
-                    error!("Mapped ip set is empty");
-                    return Err(ResolveError::from("Mapped ip set is empty"))
-                };
-                let proxy_record = ProxyRecord::new(
-                    lookup_ip,
-                    mapped_ip.into(),
-                );
+        for record in lookup.records() {
+            if !self.is_a_record_valid(record) {
+                continue
+            }
+            let ip_addr = if let Some(ip) = record.data().unwrap().to_ip_addr() {
+                ip
+            } else {
+                info!("Something wrong, record not contains ip: {} ; {:?}", record.name(), record.data());
+                continue
+            };
+            if current_ips.contains(&ip_addr) {
+                continue
+            }
+            let mapped_ip: Ipv4Addr = if let Some(ip) = available_ipv4s.pop_front() {
+                ip.into()
+            } else {
+                error!("Mapped ip set is empty");
+                return Err(ResolveError::from("Mapped ip set is empty"))
+            };
+            let proxy_record = ProxyRecord::new(
+                ip_addr,
+                mapped_ip.into(),
+                record,
+            );
 
-                if let Err(e) = record_set.push(&proxy_record) {
-                    error!(
-                        "Record already exists ({}): r: {:?}, set: {:?}",
-                        e, proxy_record, record_set,
-                    );
-                    available_ipv4s.push_front(mapped_ip);
-                    continue
-                }
+            if let Err(e) = record_set.push(&proxy_record) {
+                error!(
+                    "Record already exists ({}): r: {:?}, set: {:?}",
+                    e, proxy_record, record_set,
+                );
+                available_ipv4s.push_front(mapped_ip);
+                continue
             }
         }
 
@@ -312,6 +322,7 @@ impl TrspAuthority {
             let proxy_record = ProxyRecord::new(
                 ip_addr,
                 mapped_ip.into(),
+                record,
             );
 
             if let Err(e) = record_set.push(&proxy_record) {
