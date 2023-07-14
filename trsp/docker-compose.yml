@@ -1,0 +1,28 @@
+version: '3.1'
+services:
+  trsp-wg-vpn:
+    build:
+      context: .
+      dockerfile: build/Dockerfile
+    restart: unless-stopped
+    cap_add:
+      - NET_ADMIN
+    environment:
+      - WG_SERVERPORT=51820
+      - WG_PEERS=100
+      - WG_INTERNAL_SUBNET=10.224.0.0/16
+      - TRSP_DNS_UDP=0.0.0.0:53
+      - TRSP_WEB_ADDR=0.0.0.0:5301
+      - TRSP_DNS_HTTPS_RESOLVERS_ENABLED=true
+      - TRSP_DNS_MAPPING_IPV4_SUBNET=10.224.128.0/17
+    volumes:
+      - wireguard_config:/opt/wireguard/config
+      - trsp:/opt/trsp
+    sysctls:
+      - net.ipv4.conf.all.src_valid_mark=1
+    ports:
+      - 0.0.0.0:51821:51821/udp
+volumes:
+  wireguard_config:
+  trsp:
+

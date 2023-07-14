@@ -48,5 +48,5 @@ fn install_npm_packages() {
 }
 
 fn main() {
-    install_npm_packages();
+//    install_npm_packages();
 }

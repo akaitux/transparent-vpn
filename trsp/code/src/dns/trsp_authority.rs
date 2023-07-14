@@ -75,7 +75,7 @@ impl TrspAuthority {
         let mapping_ipv4_subnet = options.dns_mapping_ipv4_subnet.clone();
         let forwarder = TrspAuthority::create_forwarder(forward_config)?;
         let router = Box::new(Iptables::new(None, false, options.dns_mock_router));
-        router.cleanup()?;
+        router.init()?;
         let this = Self {
             origin: LowerName::from_str(".").unwrap(),
             domains_set,

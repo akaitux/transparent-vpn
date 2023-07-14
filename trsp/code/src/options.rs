@@ -74,7 +74,7 @@ pub struct Options {
     ]
     pub dns_https_resolvers: Option<Vec<SocketAddr>>,
 
-    #[clap(long, action, env = "TRSP_DNS_HTTPS_ENABLED")]
+    #[clap(long, action, env = "TRSP_DNS_HTTPS_RESOLVERS_ENABLED")]
     pub dns_https_resolvers_enabled: bool,
 
     #[clap(

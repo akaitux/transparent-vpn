@@ -51,6 +51,12 @@ impl Iptables {
         }
     }
 
+    pub fn init(&self) -> Result<(), Box<dyn Error>> {
+        self.cleanup()?;
+        self.create_chain()?;
+        Ok(())
+    }
+
     fn exec(&self, bin: &str, cmd: &[String]) -> Result<(), String> {
         if self.mock_router {
             info!("Iptables mocked exec: {}", cmd.join(" "));
