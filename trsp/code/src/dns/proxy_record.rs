@@ -9,14 +9,14 @@ use trust_dns_server::proto::rr::{Record, RecordType, RData};
 
 #[derive(Eq, PartialEq, Debug, Clone)]
 pub struct ProxyRecord {
-    pub original_addr: IpAddr,
-    pub mapped_addr: IpAddr,
+    pub original_addr: Option<IpAddr>,
+    pub mapped_addr: Option<IpAddr>,
     pub record: Record,
     pub cleanup_at: Option<DateTime<Utc>>,
 }
 
 impl ProxyRecord {
-    pub fn new(original_addr: IpAddr, mapped_addr: IpAddr, record: &Record) -> Self {
+    pub fn new(record: &Record, original_addr: Option<IpAddr>, mapped_addr: Option<IpAddr>) -> Self {
         Self {
             original_addr,
             mapped_addr,
@@ -29,8 +29,29 @@ impl ProxyRecord {
         self.cleanup_at = Some(Utc::now() + chrono::Duration::from_std(at).unwrap());
     }
 
+    pub fn rdata(&self) -> Option<&RData> {
+        return self.record.data()
+    }
+
     pub fn unmark_for_cleanup(&mut self) {
         self.cleanup_at = None;
+    }
+
+    pub fn is_cname(&self) -> bool {
+        if self.record.rr_type() == RecordType::CNAME {
+            return true
+        }
+        false
+    }
+
+    pub fn is_routable(&self) -> bool {
+        if self.original_addr.is_none() {
+            return false
+        }
+        if self.mapped_addr.is_none() {
+            return false
+        }
+        true
     }
 }
 
@@ -73,11 +94,25 @@ impl ProxyRecordSet {
 
     pub fn push(&mut self, record: &ProxyRecord) -> Result<(), Box<dyn Error>> {
         for r in &self.records {
-            if r.original_addr == record.original_addr {
-                return Err("original_addr_already_exists".into())
+
+            if r.original_addr.is_some() && record.original_addr.is_some() {
+                if r.original_addr.unwrap() == record.original_addr.unwrap() {
+                    return Err("original_addr_already_exists".into())
+                }
             }
-            if r.mapped_addr == record.mapped_addr {
-                return Err("mapped_addr_already_exists".into())
+
+            if r.mapped_addr.is_some() && record.mapped_addr.is_some() {
+                if r.mapped_addr.unwrap() == record.mapped_addr.unwrap() {
+                    return Err("mapped_addr_already_exists".into())
+                }
+            }
+
+            if r.is_cname() && record.is_cname() {
+                if r.rdata().is_some() && record.rdata().is_some() {
+                    if r.rdata().unwrap() == record.rdata().unwrap() {
+                        return Err("cname_already_exists".into())
+                    }
+                }
             }
         }
 
@@ -128,19 +163,23 @@ impl ProxyRecordSet {
             .map(|pr| {
             let mut r = Record::new();
 
-            r.set_ttl(self.calculate_ttl(&r));
-            r.set_name(pr.record.name().clone());
-            r.set_dns_class(pr.record.dns_class().clone());
+            r.set_ttl(self.calculate_ttl(&r))
+                .set_name(pr.record.name().clone())
+                .set_dns_class(pr.record.dns_class().clone())
+                .set_record_type(pr.record.record_type());
 
-            if let IpAddr::V4(ip) = pr.mapped_addr {
-                r.set_record_type(RecordType::A);
+            if let Some(IpAddr::V4(ip)) = pr.mapped_addr {
                 let rdata = RData::A(ip);
                 r.set_data(Some(rdata));
             }
-            if let IpAddr::V6(ip) = pr.mapped_addr {
-                r.set_record_type(RecordType::AAAA);
+            if let Some(IpAddr::V6(ip)) = pr.mapped_addr {
                 let rdata = RData::AAAA(ip);
                 r.set_data(Some(rdata));
+            }
+            if pr.is_cname() {
+                if let Some(data) = pr.rdata() {
+                    r.set_data(Some(data.clone()));
+                }
             }
             r
         }).collect()

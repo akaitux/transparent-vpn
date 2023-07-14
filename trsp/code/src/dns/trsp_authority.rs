@@ -171,13 +171,13 @@ impl TrspAuthority {
     }
 
     fn is_a_record_valid(&self, record: &Record) -> bool {
-        if record.rr_type() != RecordType::A  {
-            info!(
-                "Domain record is not A, continue: {} ; {}",
-                record.name(), record.rr_type()
-            );
-            return false
-        }
+        // if record.rr_type() != RecordType::A  {
+        //     info!(
+        //         "Domain record is not A, continue: {} ; {}",
+        //         record.name(), record.rr_type()
+        //     );
+        //     return false
+        // }
         if record.data().is_none() {
             info!("Domain record is empty, skip: {}", record.name());
             return false
@@ -193,13 +193,13 @@ impl TrspAuthority {
         let lookup_time = Utc::now();
 
         let mut inner_storage = self.inner_storage.write().await;
-        let mut available_ipv4s = self.available_ipv4_inner_ips.write().await;
 
         let mut record_set =  record_set.clone();
         record_set.resolved_at = lookup_time;
 
         let mut current_ips: Vec<IpAddr> = vec![];
         let mut lookup_ips: Vec<IpAddr> = vec![];
+        let mut lookup_cnames: Vec<IpAddr> = vec![];
 
 
         // Build lookup_ips vec
@@ -221,55 +221,25 @@ impl TrspAuthority {
         }
 
         for record in record_set.records_mut() {
-            current_ips.push(record.original_addr);
-            if lookup_ips.contains(&record.original_addr) {
-                record.unmark_for_cleanup()
-            } else {
-                record.mark_for_cleanup(self.cleanup_record_after_secs)
+            if let Some(ip) = record.original_addr {
+                current_ips.push(ip);
+                if lookup_ips.contains(&ip) {
+                    record.unmark_for_cleanup()
+                } else {
+                    record.mark_for_cleanup(self.cleanup_record_after_secs)
+                }
+
             }
         }
 
-        // Create records for new adresses
-        for record in lookup.records() {
-            if !self.is_a_record_valid(record) {
-                continue
-            }
-            let ip_addr = if let Some(ip) = record.data().unwrap().to_ip_addr() {
-                ip
-            } else {
-                info!("Something wrong, record not contains ip: {} ; {:?}", record.name(), record.data());
-                continue
-            };
-            if current_ips.contains(&ip_addr) {
-                continue
-            }
-            let mapped_ip: Ipv4Addr = if let Some(ip) = available_ipv4s.pop_front() {
-                ip.into()
-            } else {
-                error!("Mapped ip set is empty");
-                return Err(ResolveError::from("Mapped ip set is empty"))
-            };
-            let proxy_record = ProxyRecord::new(
-                ip_addr,
-                mapped_ip.into(),
-                record,
-            );
-
-            if let Err(e) = record_set.push(&proxy_record) {
-                error!(
-                    "Record already exists ({}): r: {:?}, set: {:?}",
-                    e, proxy_record, record_set,
-                );
-                available_ipv4s.push_front(mapped_ip);
-                continue
-            }
-        }
+        let mut available_ipv4s = self.available_ipv4_inner_ips.write().await;
+        self.add_records_to_record_set(&mut record_set, &lookup, &mut *available_ipv4s)?;
 
         if let Err(e) = self.router.add_route(&record_set) {
             error!("add_blocked_domain: Error while adding route '{:?}': {}", record_set, e);
             for record in record_set.records() {
                 match record.mapped_addr {
-                    IpAddr::V4(a) => available_ipv4s.push_front(a),
+                    Some(IpAddr::V4(a)) => available_ipv4s.push_front(a),
                     _ => {}
                 }
             }
@@ -283,7 +253,7 @@ impl TrspAuthority {
             );
             for record in record_set.records() {
                 match record.mapped_addr {
-                    IpAddr::V4(a) => available_ipv4s.push_front(a),
+                    Some(IpAddr::V4(a)) => available_ipv4s.push_front(a),
                     _ => {}
                 }
             }
@@ -306,6 +276,18 @@ impl TrspAuthority {
             if !self.is_a_record_valid(record) {
                 continue
             }
+
+            if record.record_type() == RecordType::CNAME {
+                let proxy_record = ProxyRecord::new(record, None, None);
+                if let Err(e) = record_set.push(&proxy_record) {
+                    error!(
+                        "Record already exists ({}): r: {:?}, set: {:?}",
+                        e, proxy_record, record_set,
+                    );
+                }
+                continue
+            }
+
             let mapped_ip: Ipv4Addr = if let Some(ip) = available_ipv4s.pop_front() {
                 ip.into()
             } else {
@@ -320,9 +302,9 @@ impl TrspAuthority {
                 continue
             };
             let proxy_record = ProxyRecord::new(
-                ip_addr,
-                mapped_ip.into(),
                 record,
+                Some(ip_addr),
+                Some(mapped_ip.into()),
             );
 
             if let Err(e) = record_set.push(&proxy_record) {
@@ -377,7 +359,7 @@ impl TrspAuthority {
             error!("add_blocked_domain: Error while adding route '{:?}': {}", record_set, e);
             for record in record_set.records() {
                 match record.mapped_addr {
-                    IpAddr::V4(a) => available_ipv4s.push_front(a),
+                    Some(IpAddr::V4(a)) => available_ipv4s.push_front(a),
                     _ => {}
                 }
             }
@@ -391,7 +373,7 @@ impl TrspAuthority {
             );
             for record in record_set.records() {
                 match record.mapped_addr {
-                    IpAddr::V4(a) => available_ipv4s.push_front(a),
+                    Some(IpAddr::V4(a)) => available_ipv4s.push_front(a),
                     _ => {}
                 }
             }

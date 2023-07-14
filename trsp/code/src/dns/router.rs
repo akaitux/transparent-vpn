@@ -129,6 +129,12 @@ impl Iptables {
     }
 
     fn gen_rule(&self, record: &ProxyRecord, comment: &str, mode: &str) -> Vec<String> {
+        if record.original_addr.is_none() {
+            panic!("record.original_addr is empty {:?}", record)
+        }
+        if record.mapped_addr.is_none() {
+            panic!("record.mapped_addr is empty {:?}", record)
+        }
         let mut cmd: Vec<String> = vec![];
         match mode {
             "add" =>  cmd.extend_from_slice(&vec_of_strings!["-A", self.chain_name]),
@@ -141,7 +147,7 @@ impl Iptables {
             &vec_of_strings!["-w", "-t", "nat", "-m", "comment", "--comment", comment]
         );
         cmd.extend_from_slice(
-           &vec_of_strings!["-d", record.mapped_addr, "-j", "DNAT", "--to", record.original_addr]
+           &vec_of_strings!["-d", record.mapped_addr.unwrap(), "-j", "DNAT", "--to", record.original_addr.unwrap()]
         );
         cmd
     }
@@ -176,12 +182,15 @@ impl Router for Iptables {
         debug!("ADD ROUTE: {:?}", record_set);
         let comment = Iptables::generate_comment(record_set);
         for record in record_set.records() {
+            if ! record.is_routable() {
+                continue
+            }
             if let Some(_) = record.cleanup_at {
                 info!("Skip add route for record {:?}: cleanup_at not empty", record);
                 continue
             }
             let cmd = self.gen_rule(record, &comment, "check");
-            let check_output = match record.original_addr {
+            let check_output = match record.original_addr.unwrap() {
                 IpAddr::V4(_) => {self.exec_ipv4(&cmd)},
                 IpAddr::V6(_) => {self.exec_ipv6(&cmd)},
             };
@@ -201,7 +210,7 @@ impl Router for Iptables {
                         return Err(e.into())
                     }
                     let cmd = self.gen_rule(record, &comment, "add");
-                    match record.original_addr {
+                    match record.original_addr.unwrap() {
                         IpAddr::V4(_) => {self.exec_ipv4(&cmd)},
                         IpAddr::V6(_) => {self.exec_ipv6(&cmd)},
                     }
@@ -230,8 +239,11 @@ impl Router for Iptables {
         debug!("DEL ROUTE: {:?}", record_set);
         let comment = Iptables::generate_comment(record_set);
         for record in record_set.records() {
+            if ! record.is_routable() {
+                continue
+            }
             let cmd = self.gen_rule(record, &comment, "del");
-            let output = match record.original_addr {
+            let output = match record.original_addr.unwrap() {
                 IpAddr::V4(_) => {self.exec_ipv4(&cmd)},
                 IpAddr::V6(_) => {self.exec_ipv6(&cmd)},
             };
