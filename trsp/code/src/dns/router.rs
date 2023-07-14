@@ -150,6 +150,7 @@ impl Iptables {
 
 impl Router for Iptables {
     fn create_chain(&self) -> Result<(), String> {
+        // TODO ADD -t nat -A PREROUTING -s 10.224.0.0/15 -d 10.224.0.0/15 -j dnsmap
         let mut functions: Vec<Box<dyn Fn(&[String]) -> Result<(), String> >> = vec![
             Box::new(|cmd| {self.exec_ipv4(cmd)} ),
         ];
