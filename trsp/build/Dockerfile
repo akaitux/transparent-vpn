@@ -4,13 +4,16 @@ RUN \
     apt-get update \
     && apt-get install -y pkg-config libssl-dev nodejs npm
 
-ADD code /build
-RUN \
-    cd build \
-    && cargo build --release
+WORKDIR /build
+RUN USER=root cargo new --bin trsp && mkdir ./trsp/front
+COPY code/Cargo.toml code/Cargo.lock code/build.rs ./trsp/
+WORKDIR /build/trsp
+RUN SKIP_CBINDGEN=1 cargo build --release
+COPY code/front/package.json code/front/package-lock.json
+RUN cargo build --release
 
-RUN \
-    ls /build/target/release/trsp
+COPY code .
+RUN cargo build --release
 
 
 FROM debian:bullseye-slim
@@ -47,11 +50,12 @@ RUN find /etc/services.d -exec chmod ug+x {} \;
 COPY build/etc/sudoers.d /etc/sudoers.d/
 COPY build/opt/wireguard /opt/wireguard
 COPY build/etc/crontab /etc/crontab
-COPY --from=build /build/target/release/trsp /bin/trsp
-RUN chmod +x /bin/trsp
 
 VOLUME /opt/wireguard/config
 VOLUME /opt/trsp/
+
+COPY --from=build /build/trsp/target/release/trsp /bin/trsp
+#RUN chmod +x /bin/trsp
 
 ENTRYPOINT ["/init"]
 

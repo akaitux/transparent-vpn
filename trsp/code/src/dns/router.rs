@@ -201,7 +201,8 @@ impl Router for Iptables {
                 let cmd = vec_of_strings![
                     "-t", "nat",
                     "-s", net.to_string(),
-                    "-d", net.to_string()
+                    "-d", net.to_string(),
+                    "-j", &self.chain_name
                 ];
                 let check_cmd = [vec_of_strings!["-C", "PREROUTING"], cmd.clone()].concat();
                 let add_cmd = [vec_of_strings!["-A", "PREROUTING"], cmd.clone()].concat();
