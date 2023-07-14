@@ -7,6 +7,7 @@ use std::{
 use lazy_static::lazy_static;
 use tracing::{error, debug, info};
 use regex::Regex;
+use ipnet::{Ipv4Net, Ipv6Net};
 
 
 lazy_static!{
@@ -32,13 +33,19 @@ pub trait Router: Send + Sync {
 
 pub struct Iptables {
     chain_name: String,
+    vpn_subnet: VpnSubnet,
     disable_ipv6: bool,
     mock_router: bool,
 }
 
+pub enum VpnSubnet {
+    V4(Ipv4Net),
+    V6(Ipv6Net),
+}
+
 
 impl Iptables {
-    pub fn new(chain_name: Option<&str>, disable_ipv6: bool, mock_router: bool) -> Self {
+    pub fn new(chain_name: Option<&str>, vpn_subnet: VpnSubnet, disable_ipv6: bool, mock_router: bool) -> Self {
         let chain_name = if let Some(n) = chain_name {
             String::from(n)
         } else {
@@ -46,6 +53,7 @@ impl Iptables {
         };
         Self {
             chain_name,
+            vpn_subnet,
             disable_ipv6,
             mock_router,
         }
@@ -128,7 +136,7 @@ impl Iptables {
        Err(String::from("uknown"))
     }
 
-    fn gen_rule(&self, record: &ProxyRecord, comment: &str, mode: &str) -> Vec<String> {
+    fn gen_route_rule(&self, record: &ProxyRecord, comment: &str, mode: &str) -> Vec<String> {
         if record.original_addr.is_none() {
             panic!("record.original_addr is empty {:?}", record)
         }
@@ -152,6 +160,22 @@ impl Iptables {
         cmd
     }
 
+    fn is_rule_exists(&self, exec_output: Result<(), String>) -> bool {
+        if exec_output.is_ok() {
+            return true
+        }
+        if let Err(e) = &exec_output {
+            if e.contains("does a matching rule exist") {
+                return false
+            }
+        }
+        error!("is_rule_exists: Uknown output from iptables: {:?}", exec_output);
+        // "true" means "dont' make a rule"
+        true
+
+    }
+
+
 }
 
 impl Router for Iptables {
@@ -165,15 +189,35 @@ impl Router for Iptables {
         }
         for f in functions {
             let res = f(&vec_of_strings!["-N", &self.chain_name, "-t", "nat"]);
-            match res {
-                Ok(_) => (),
-                Err(e) => {
-                    if e.to_string().contains("Chain already exists") {
-                        return Ok(())
-                    }
-                    return Err(format!("create_chain: {}", e.to_string()).into())
-                },
+            if let Err(e) = res {
+                if e.to_string().contains("Chain already exists") {
+                    continue
+                }
+                return Err(format!("create_chain: {}", e.to_string()).into())
             }
+        }
+        let res = match self.vpn_subnet {
+            VpnSubnet::V4(net) => {
+                let cmd = vec_of_strings![
+                    "-t", "nat",
+                    "-s", net.to_string(),
+                    "-d", net.to_string()
+                ];
+                let check_cmd = [vec_of_strings!["-C", "PREROUTING"], cmd.clone()].concat();
+                let add_cmd = [vec_of_strings!["-A", "PREROUTING"], cmd.clone()].concat();
+
+                if ! self.is_rule_exists(self.exec_ipv4(&check_cmd)) {
+                    self.exec_ipv4(&add_cmd)
+                } else {
+                    Ok(())
+                }
+            },
+            VpnSubnet::V6(_) => {
+                panic!("Not supported")
+            }
+        };
+        if let Err(e) = res {
+            return Err(format!("create_chain: {}", e.to_string()).into())
         }
         Ok(())
     }
@@ -189,7 +233,7 @@ impl Router for Iptables {
                 info!("Skip add route for record {:?}: cleanup_at not empty", record);
                 continue
             }
-            let cmd = self.gen_rule(record, &comment, "check");
+            let cmd = self.gen_route_rule(record, &comment, "check");
             let check_output = match record.original_addr.unwrap() {
                 IpAddr::V4(_) => {self.exec_ipv4(&cmd)},
                 IpAddr::V6(_) => {self.exec_ipv6(&cmd)},
@@ -209,7 +253,7 @@ impl Router for Iptables {
                         );
                         return Err(e.into())
                     }
-                    let cmd = self.gen_rule(record, &comment, "add");
+                    let cmd = self.gen_route_rule(record, &comment, "add");
                     match record.original_addr.unwrap() {
                         IpAddr::V4(_) => {self.exec_ipv4(&cmd)},
                         IpAddr::V6(_) => {self.exec_ipv6(&cmd)},
@@ -242,7 +286,7 @@ impl Router for Iptables {
             if ! record.is_routable() {
                 continue
             }
-            let cmd = self.gen_rule(record, &comment, "del");
+            let cmd = self.gen_route_rule(record, &comment, "del");
             let output = match record.original_addr.unwrap() {
                 IpAddr::V4(_) => {self.exec_ipv4(&cmd)},
                 IpAddr::V6(_) => {self.exec_ipv6(&cmd)},
@@ -264,7 +308,7 @@ impl Router for Iptables {
     }
 
     fn routes_list(&self) -> Result<Vec<ProxyRecordSet>, Box<dyn Error>> {
-        let mut record_set: Vec<ProxyRecordSet> = vec![];
+        let record_set: Vec<ProxyRecordSet> = vec![];
         Ok(record_set)
     }
 

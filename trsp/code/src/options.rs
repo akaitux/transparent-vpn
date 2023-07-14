@@ -153,6 +153,13 @@ pub struct Options {
 
     #[clap(
         long,
+        default_value = "10.224.0.0/16",
+        env = "TRSP_DNS_VPN_IPV4_SUBNET")
+    ]
+    pub dns_vpn_ipv4_subnet: Ipv4Net,
+
+    #[clap(
+        long,
         default_value = "false",
         env = "TRSP_DNS_DISABLE_IPTABLES_COMMANDS")
     ]

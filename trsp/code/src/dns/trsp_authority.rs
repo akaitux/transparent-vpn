@@ -41,7 +41,7 @@ use super::{
     domains_set::ArcDomainsSet,
     inner_storage::InnerStorage,
     proxy_record::{ProxyRecordSet, ProxyRecord},
-    router::{Router, Iptables}
+    router::{Router, Iptables, VpnSubnet}
 };
 
 
@@ -74,7 +74,8 @@ impl TrspAuthority {
         //let resolver = TrspAuthority::create_resolver(forward_config)?;
         let mapping_ipv4_subnet = options.dns_mapping_ipv4_subnet.clone();
         let forwarder = TrspAuthority::create_forwarder(forward_config)?;
-        let router = Box::new(Iptables::new(None, false, options.dns_mock_router));
+        let vpn_subnet = VpnSubnet::V4(options.dns_vpn_ipv4_subnet);
+        let router = Box::new(Iptables::new(None, vpn_subnet, false, options.dns_mock_router));
         router.init()?;
         let this = Self {
             origin: LowerName::from_str(".").unwrap(),
