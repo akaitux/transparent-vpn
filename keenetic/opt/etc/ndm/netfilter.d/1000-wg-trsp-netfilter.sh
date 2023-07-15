@@ -11,7 +11,7 @@ iptables_check_cmd="iptables -C $iptables_cmd"
 iptables_del_cmd="iptables -D $iptables_cmd"
 
 
-WG_IF=`ip -o -4 addr show | egrep "10\.224\.0\.[0-9]{1,3}\/15" | awk '{print $2}'`
+WG_IF=`ip -o -4 addr show | egrep "10\.224\.0\.[0-9]{1,3}\/" | awk '{print $2}'`
 if [ -z "$WG_IF" ]; then
     echo "wg interface for 10.224.0.0/15 not found";
     exit 0
