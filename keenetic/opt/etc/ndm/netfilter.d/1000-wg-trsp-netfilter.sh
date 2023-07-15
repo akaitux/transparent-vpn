@@ -37,3 +37,4 @@ if [ "$is_interface_up" == "1" ]; then
 #    if grep -q "server=$WG_DNS" $DNSMASQ_CONF; then
 #	sed -ie "/^server=$WG_DNS/d" $DNSMASQ_CONF
 #
+fi
