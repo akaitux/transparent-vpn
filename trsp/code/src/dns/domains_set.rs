@@ -189,7 +189,7 @@ impl DomainsSet {
             err.push(e.to_string());
         }
         let duration = start.elapsed();
-        info!("Domains load time: {:?}", duration);
+        warn!("Domains load time: {:?}", duration);
 
         if let Some(_) = &self.zapret_nxdomains_txt_url {
             let start = Instant::now();
@@ -198,7 +198,7 @@ impl DomainsSet {
                 err.push(e.to_string());
             }
             let duration = start.elapsed();
-            info!("NXDomains load time: {:?}", duration);
+            warn!("NXDomains load time: {:?}", duration);
         }
         if ! err.is_empty() {
             return Err(err.join(". ").into())

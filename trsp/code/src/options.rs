@@ -4,8 +4,14 @@ use ipnet::Ipv4Net;
 
 #[derive(Parser, Debug, Clone)]
 pub struct Options {
-    #[clap(short = 'd', long = "debug", action, env = "TRSP_DEBUG")]
-    pub debug: bool,
+    #[clap(
+        short = 'l',
+        long = "log-level",
+        default_value="warn",
+        help="debug|info|warn|error",
+        env = "TRSP_LOGLEVEL"
+    )]
+    pub log_level: String,
 
 
     #[clap(short = 'w', long = "workdir", default_value="", env = "TRSP_WORKDIR")]
@@ -167,6 +173,6 @@ pub struct Options {
 
 
     // WEB
-    #[clap(long, default_value = "0.0.0.0:80", env = "TRSP_WEB_ADDR")]
+    #[clap(long, default_value = "0.0.0.0:8080", env = "TRSP_WEB_ADDR")]
     pub web_addr: SocketAddr,
 }

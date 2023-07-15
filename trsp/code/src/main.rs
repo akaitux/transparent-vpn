@@ -8,12 +8,12 @@ use std::{
     error::Error,
     env,
     fs,
-    path::PathBuf, sync::Arc,
+    path::PathBuf, sync::Arc, process,
 };
 
 
 use tracing_subscriber::{filter, prelude::*};
-use tracing::info;
+use tracing::{info,warn,error};
 use tokio::{
     signal::unix::{signal, SignalKind},
     sync::Mutex,
@@ -24,10 +24,15 @@ use tokio::{
 fn setup_logger(opts: &options::Options) {
     let stdout_log = tracing_subscriber::fmt::layer().pretty();
 
-    let log_level = if opts.debug == true {
-        filter::LevelFilter::DEBUG
-    } else {
-        filter::LevelFilter::INFO
+    let log_level = match opts.log_level.as_str() {
+        "debug" => filter::LevelFilter::DEBUG,
+        "info" => filter::LevelFilter::INFO,
+        "warn" => filter::LevelFilter::WARN,
+        "error" => filter::LevelFilter::ERROR,
+        _ => {
+            error!("--log-level: option '{}' not supported", opts.log_level);
+            process::exit(1)
+        }
     };
 
     tracing_subscriber::registry()
@@ -101,7 +106,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let dns_handler = match dns_server.lock().await.start().await {
         Ok(dns_handler) => dns_handler,
         Err(err) => {
-            println!("DNS server start failed: {:?}", err);
+            error!("DNS server start failed: {:?}", err);
             std::process::exit(1);
         }
     };
@@ -124,9 +129,9 @@ async fn main() -> Result<(), Box<dyn Error>> {
                 _ = s_hangup.recv() =>  {
                     let mut dns_server = dns_server.lock().await;
                     if let Err(e) = dns_server.reload().await {
-                        println!("Error while reload: {}", e)
+                        error!("Error while reload: {}", e)
                     } else {
-                        println!("Reload successfull")
+                        error!("Reload successfull")
                     }
                 }
             }
@@ -139,10 +144,10 @@ async fn main() -> Result<(), Box<dyn Error>> {
             // TODO: Откуда тут взялся еще один unwrap() ?
             match res.unwrap() {
                 Ok(msg) => {
-                    println!("Web server gracefully shutdown: {:?}", msg);
+                    warn!("Web server gracefully shutdown: {:?}", msg);
                 }
                 Err(msg) => {
-                    println!("Web server error: {:?}", msg);
+                    error!("Web server error: {:?}", msg);
                     std::process::exit(1);
                 }
             }
@@ -150,10 +155,10 @@ async fn main() -> Result<(), Box<dyn Error>> {
         res = dns_handler => {
             match res {
                 Ok(msg) => {
-                    println!("Dns server gracefully shutdown: {:?}", msg);
+                    warn!("Dns server gracefully shutdown: {:?}", msg);
                 }
                 Err(msg) => {
-                    println!("Dns server error: {:?}", msg);
+                    error!("Dns server error: {:?}", msg);
                     std::process::exit(1);
                 }
             }
