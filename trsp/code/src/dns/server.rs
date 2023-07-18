@@ -20,12 +20,27 @@ use reqwest::Url;
 use tracing::error;
 
 use super::domains_set::{ArcDomainsSet, DomainsSet};
+use super::cleaner::Cleaner;
+
+
+
+pub struct  DnsServerHandlers {
+    pub server: Option<JoinHandle<Result<(), ProtoError>>>,
+    pub cleaner: Option<JoinHandle<()>>,
+}
+
+impl DnsServerHandlers {
+    pub fn new() -> Self {
+        Self {server: None, cleaner: None}
+    }
+}
 
 
 pub struct DnsServer {
     options: Options,
     workdir: PathBuf,
     domains_set: Option<ArcDomainsSet>,
+    cleaner: Option<Cleaner>,
 }
 
 
@@ -35,6 +50,7 @@ impl<'a> DnsServer {
             options: options.clone(),
             workdir: workdir.clone(),
             domains_set: None,
+            cleaner: None,
         }
     }
 
@@ -54,11 +70,13 @@ impl<'a> DnsServer {
     // }
 
     pub async fn start(&mut self)
-        -> Result<JoinHandle<Result<(), ProtoError>>, Box<dyn Error>>
+        -> Result<DnsServerHandlers, Box<dyn Error>>
     {
+        // let mut handlers: Vec<JoinHandle<Result<(), ProtoError>>> = vec![];
+        let mut handlers = DnsServerHandlers::new();
+
         let domains_set = Arc::new(self.create_domains_set()?);
         self.domains_set = Some(domains_set.clone());
-
         if let Err(e) = domains_set.import_domains().await {
             error!("Error while loading blocked domains data: {}", e)
         }
@@ -66,7 +84,6 @@ impl<'a> DnsServer {
         let handler = Handler::new(&self.options, domains_set)?;
 
         let mut server = ServerFuture::new(handler);
-
         let tcp_timeout = Duration::from_secs(
             self.options.dns_tcp_timeout.into()
         );
@@ -79,10 +96,25 @@ impl<'a> DnsServer {
                 tcp_timeout,
             );
         }
-
         let dns_join = tokio::spawn(server.block_until_done());
+        handlers.server = Some(dns_join);
 
-        Ok(dns_join)
+        let cleaner = self.create_cleaner();
+        let cleaner_handler = tokio::spawn(cleaner.block_until_done());
+        handlers.cleaner = Some(cleaner_handler);
+
+        Ok(handlers)
+    }
+
+    fn create_cleaner(&mut self) -> Cleaner {
+
+        let clear_after_ttl = Duration::from_secs(self.options.dns_cleaner_after_ttl);
+        let clear_period = Duration::from_secs(self.options.dns_cleaner_period);
+        Cleaner::new(
+            self.domains_set.clone().unwrap(),
+            &clear_after_ttl,
+            &clear_period,
+        )
     }
 
     pub async fn reload(&mut self) -> Result<(), Box<dyn Error>> {

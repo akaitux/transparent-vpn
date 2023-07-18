@@ -1,5 +1,5 @@
 use clap::Parser;
-use std::net::SocketAddr;
+use std::{net::SocketAddr, time::Duration};
 use ipnet::Ipv4Net;
 
 #[derive(Parser, Debug, Clone)]
@@ -131,6 +131,23 @@ pub struct Options {
         env = "TRSP_DNS_RECORD_LOOKUP_MAX_TTL")
     ]
     pub dns_record_lookup_max_ttl: u64,
+
+    // If ttl > value -> remove record from iptables and storage. In seconds.
+    #[clap(
+        long,
+        help = "in seconds",
+        default_value = "120",
+        env = "TRSP_DNS_CLEANER_AFTER_TTL")
+    ]
+    pub dns_cleaner_after_ttl: u64,
+
+    #[clap(
+        long,
+        help = "in seconds",
+        default_value = "600",
+        env = "TRSP_DNS_CLEANER_PERIOD")
+    ]
+    pub dns_cleaner_period: u64,
 
 
     #[clap(long, action, default_value_t=false, env="TRSP_DNS_USE_NXDOMAINS")]

@@ -103,8 +103,8 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let dns_workdir = workdir.join("dns");
     let dns_server_arc = Arc::new(Mutex::new(dns::server::DnsServer::new(&options, &dns_workdir)));
     let dns_server = dns_server_arc.clone();
-    let dns_handler = match dns_server.lock().await.start().await {
-        Ok(dns_handler) => dns_handler,
+    let dns_handlers = match dns_server.lock().await.start().await {
+        Ok(dns_handlers) => dns_handlers,
         Err(err) => {
             error!("DNS server start failed: {:?}", err);
             std::process::exit(1);
@@ -152,13 +152,24 @@ async fn main() -> Result<(), Box<dyn Error>> {
                 }
             }
         },
-        res = dns_handler => {
+        res = dns_handlers.server.unwrap() => {
             match res {
                 Ok(msg) => {
                     warn!("Dns server gracefully shutdown: {:?}", msg);
                 }
                 Err(msg) => {
                     error!("Dns server error: {:?}", msg);
+                    std::process::exit(1);
+                }
+            }
+        },
+        res = dns_handlers.cleaner.unwrap() => {
+            match res {
+                Ok(msg) => {
+                    println!("Dns server cleaner gracefully shutdown: {:?}", msg);
+                }
+                Err(msg) => {
+                    println!("Dns server cleaner error: {:?}", msg);
                     std::process::exit(1);
                 }
             }
