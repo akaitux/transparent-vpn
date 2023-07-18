@@ -2,7 +2,7 @@ use crate::dns::handler::Handler;
 use crate::options::Options;
 use tokio::{
     task::JoinHandle,
-    net::{TcpListener, UdpSocket},
+    net::{TcpListener, UdpSocket}, sync::RwLock,
 };
 use std::{
     error::Error,
@@ -19,7 +19,7 @@ use reqwest::Url;
 
 use tracing::error;
 
-use super::domains_set::{ArcDomainsSet, DomainsSet};
+use super::{domains_set::{ArcDomainsSet, DomainsSet}, inner_storage::{InnerStorage, ArcInnerStorage}};
 use super::cleaner::Cleaner;
 
 
@@ -81,7 +81,8 @@ impl<'a> DnsServer {
             error!("Error while loading blocked domains data: {}", e)
         }
 
-        let handler = Handler::new(&self.options, domains_set)?;
+        let handler = Handler::new(&self.options, domains_set).await?;
+        handlers.cleaner = Some(handler.run_cleaner());
 
         let mut server = ServerFuture::new(handler);
         let tcp_timeout = Duration::from_secs(
@@ -99,22 +100,8 @@ impl<'a> DnsServer {
         let dns_join = tokio::spawn(server.block_until_done());
         handlers.server = Some(dns_join);
 
-        let cleaner = self.create_cleaner();
-        let cleaner_handler = tokio::spawn(cleaner.block_until_done());
-        handlers.cleaner = Some(cleaner_handler);
 
         Ok(handlers)
-    }
-
-    fn create_cleaner(&mut self) -> Cleaner {
-
-        let clear_after_ttl = Duration::from_secs(self.options.dns_cleaner_after_ttl);
-        let clear_period = Duration::from_secs(self.options.dns_cleaner_period);
-        Cleaner::new(
-            self.domains_set.clone().unwrap(),
-            &clear_after_ttl,
-            &clear_period,
-        )
     }
 
     pub async fn reload(&mut self) -> Result<(), Box<dyn Error>> {

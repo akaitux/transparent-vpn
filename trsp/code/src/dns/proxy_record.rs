@@ -61,7 +61,7 @@ pub struct ProxyRecordSet {
     pub domain: String,
     records: Vec<ProxyRecord>,
     pub resolved_at: DateTime<Utc>,
-    pub ttl: Duration,
+    ttl: Duration,
 }
 
 impl ProxyRecordSet {
@@ -120,25 +120,8 @@ impl ProxyRecordSet {
         Ok(())
     }
 
-    fn calculate_ttl(&self, record: &Record) -> u32 {
-        let mut resolved_at_secs = (Utc::now() - self.resolved_at).num_seconds();
-
-        if resolved_at_secs < 0 {
-            error!("Error. resolved_at_secs < 0 for record {:?}", record);
-            resolved_at_secs = 0;
-
-        }
-
-        let resolved_at_secs: u64 = match resolved_at_secs.try_into() {
-            Ok(r) => r,
-            Err(_) => {
-                error!(
-                    "Internal error. resolved_at_secs casting error (i64 -> u64): {}, {}",
-                    record, resolved_at_secs
-                );
-                0
-            }
-        };
+    pub fn ttl(&self) -> u32 {
+        let mut resolved_at_secs = self.resolved_secs_ago();
 
         let mut ttl = 0;
         if self.ttl.as_secs() > resolved_at_secs {
@@ -149,7 +132,7 @@ impl ProxyRecordSet {
             Err(_) => {
                 error!(
                     "Internal error. ttl casting error (u64 -> u32): {}, {}",
-                    record, resolved_at_secs
+                    self.domain, resolved_at_secs
                 );
                 u32::MAX
 
@@ -163,7 +146,7 @@ impl ProxyRecordSet {
             .map(|pr| {
             let mut r = Record::new();
 
-            r.set_ttl(self.calculate_ttl(&r))
+            r.set_ttl(self.ttl())
                 .set_name(pr.record.name().clone())
                 .set_dns_class(pr.record.dns_class().clone())
                 .set_record_type(pr.record.record_type());
@@ -183,6 +166,28 @@ impl ProxyRecordSet {
             }
             r
         }).collect()
+    }
+
+    pub fn resolved_secs_ago(&self) -> u64 {
+        let resolved_at_secs = (Utc::now() - self.resolved_at).num_seconds();
+        if resolved_at_secs < 0 {
+            error!(
+                "resolved_secs_ago: self.resolved_at({}) > UTC::now()",
+                self.resolved_at,
+            );
+            return 0
+
+        }
+        match resolved_at_secs.try_into() {
+            Ok(r) => r,
+            Err(_) => {
+                error!(
+                    "Internal error. resolved_secs_ago casting error (i64 -> u64): {}, {}",
+                    self.domain , resolved_at_secs
+                );
+                return 0
+            }
+        }
     }
 }
 

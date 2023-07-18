@@ -10,7 +10,7 @@ use std::{
 use chrono::Utc;
 use std::time::Duration;
 use ipnet::Ipv4Net;
-use tokio::sync::RwLock;
+use tokio::{sync::{RwLock, Mutex}, task::JoinHandle};
 use tracing::{debug, warn, error, info};
 
 
@@ -39,20 +39,21 @@ use crate::options::Options;
 
 use super::{
     domains_set::ArcDomainsSet,
-    inner_storage::InnerStorage,
+    inner_storage::{InnerStorage, ArcInnerStorage},
     proxy_record::{ProxyRecordSet, ProxyRecord},
-    router::{Router, Iptables, VpnSubnet}
+    router::{Router, Iptables, VpnSubnet}, cleaner::Cleaner
 };
 
 
 pub struct TrspAuthority {
+    options: Options,
     origin: LowerName,
     domains_set: ArcDomainsSet,
     forwarder: Arc<TokioAsyncResolver>,
-    inner_storage: RwLock<InnerStorage>,
+    inner_storage: ArcInnerStorage,
     mapping_ipv4_subnet: Ipv4Net,
     available_ipv4_inner_ips: RwLock<VecDeque<Ipv4Addr>>,
-    router: Box<dyn Router>,
+    router: Arc<Mutex<dyn Router>>,
     max_positive_ttl: Duration,
     max_negative_ttl: Duration,
     max_record_lookup_cache_ttl: Duration,
@@ -65,7 +66,7 @@ pub struct TrspAuthority {
 
 impl TrspAuthority {
 
-    pub fn new(
+    pub async fn new(
         domains_set: ArcDomainsSet,
         forward_config: &ForwardConfig,
         options: &Options,
@@ -73,16 +74,20 @@ impl TrspAuthority {
     ) -> Result<Self, Box<dyn Error>>
     {
         //let resolver = TrspAuthority::create_resolver(forward_config)?;
+        let inner_storage = Arc::from(RwLock::new(InnerStorage::new()));
         let mapping_ipv4_subnet = options.dns_mapping_ipv4_subnet.clone();
         let forwarder = TrspAuthority::create_forwarder(forward_config)?;
         let vpn_subnet = VpnSubnet::V4(options.dns_vpn_ipv4_subnet);
-        let router = Box::new(Iptables::new(None, vpn_subnet, false, options.dns_mock_router));
-        router.init()?;
+        let router = Arc::new(Mutex::new(
+            Iptables::new(None, vpn_subnet, false, options.dns_mock_router)
+        ));
+        router.lock().await.init()?;
         let this = Self {
+            options: options.clone(),
             origin: LowerName::from_str(".").unwrap(),
             domains_set,
             forwarder,
-            inner_storage: RwLock::new(InnerStorage::new()),
+            inner_storage: inner_storage.clone() ,
             mapping_ipv4_subnet,
             available_ipv4_inner_ips: RwLock::new(VecDeque::from_iter(mapping_ipv4_subnet.hosts())),
             router,
@@ -95,6 +100,27 @@ impl TrspAuthority {
             //forwarder_cache: RwLock::new(HashMap::with_capacity(FORWARDER_CACHE_SIZE)),
         };
         Ok(this)
+    }
+
+    pub fn create_cleaner(
+        inner_storage: ArcInnerStorage,
+        router: Arc<Mutex<dyn Router>>,
+        options: &Options
+    ) -> Cleaner
+    {
+        let clear_after_ttl = Duration::from_secs(options.dns_cleaner_after_ttl);
+        let clear_period = Duration::from_secs(options.dns_cleaner_period);
+        Cleaner::new(
+            inner_storage,
+            router,
+            &clear_after_ttl,
+            &clear_period,
+        )
+    }
+
+    pub fn run_cleaner(&self) -> JoinHandle<()> {
+        let cleaner = Self::create_cleaner(self.inner_storage.clone(), self.router.clone(), &self.options);
+        tokio::spawn(cleaner.block_until_done())
     }
 
 
@@ -237,7 +263,7 @@ impl TrspAuthority {
         let mut available_ipv4s = self.available_ipv4_inner_ips.write().await;
         self.add_records_to_record_set(&mut record_set, &lookup, &mut *available_ipv4s)?;
 
-        if let Err(e) = self.router.add_route(&record_set) {
+        if let Err(e) = self.router.lock().await.add_route(&record_set) {
             error!("add_blocked_domain: Error while adding route '{:?}': {}", record_set, e);
             for record in record_set.records() {
                 match record.mapped_addr {
@@ -357,7 +383,7 @@ impl TrspAuthority {
 
         self.add_records_to_record_set(&mut record_set, &lookup,  &mut available_ipv4s)?;
 
-        if let Err(e) = self.router.add_route(&record_set) {
+        if let Err(e) = self.router.lock().await.add_route(&record_set) {
             error!("add_blocked_domain: Error while adding route '{:?}': {}", record_set, e);
             for record in record_set.records() {
                 match record.mapped_addr {

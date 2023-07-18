@@ -5,9 +5,13 @@ use std::{
 };
 
 
+use tokio::sync::RwLock;
 use trust_dns_server::client::rr::{LowerName, RecordType, RrKey};
 
 use super::proxy_record::ProxyRecordSet;
+
+
+pub type ArcInnerStorage = Arc<RwLock<InnerStorage>>;
 
 
 #[derive(Default)]
@@ -27,6 +31,19 @@ impl InnerStorage {
 
     pub fn find(&self, name: &LowerName, rtype: RecordType) -> Option<Arc<ProxyRecordSet>> {
         self.inner_lookup(name, rtype)
+    }
+
+    pub fn records(&self) -> &HashMap<RrKey, Arc<ProxyRecordSet>> {
+        &self.records
+    }
+
+    pub fn remove(&mut self, rrkey: &RrKey) {
+        let record = if let Some(r) = self.records.get(rrkey) {
+            r
+        } else {
+                return
+        };
+        self.records.remove(rrkey);
     }
 
     pub fn upsert(

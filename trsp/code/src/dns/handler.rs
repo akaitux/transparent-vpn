@@ -1,6 +1,7 @@
 use std::{net::SocketAddr, sync::Arc, time::Duration};
 
 use crate::options::Options;
+use tokio::task::JoinHandle;
 use trust_dns_server::{
     proto::op::{Header, OpCode, MessageType, ResponseCode},
     server::{Request, RequestHandler, ResponseHandler, ResponseInfo},
@@ -32,18 +33,28 @@ pub enum DnsError {
 pub struct Handler {
     pub domains: ArcDomainsSet,
     // forwarder_authority: Catalog,
-    trsp_authority: Catalog,
+    trsp_authority: Arc<TrspAuthority>,
+    catalog: Catalog,
 }
 
 
 impl Handler {
-    pub fn new(options: &Options, domains: ArcDomainsSet) -> Result<Self, Box<dyn Error>> {
+    pub async fn new(
+        options: &Options,
+        domains: ArcDomainsSet,
+    ) -> Result<Self, Box<dyn Error>>
+    {
         // https://github.com/bluejekyll/trust-dns/blob/main/crates/resolver/src/config.rs
-        let trsp_authority = Self::create_trsp_authority(options, domains.clone())?;
+        let (trsp_authority, catalog) = Self::create_trsp_authority(options, domains.clone()).await?;
         Ok(Handler {
             domains,
             trsp_authority,
+            catalog,
         })
+    }
+
+    pub fn run_cleaner(&self) -> JoinHandle<()> {
+        self.trsp_authority.run_cleaner()
     }
 
     fn add_clear_resolvers(
@@ -91,20 +102,23 @@ impl Handler {
         }
     }
 
-    fn create_trsp_authority(options: &Options, blocked_domains_set: ArcDomainsSet) -> Result<Catalog, Box<dyn Error>> {
+    async fn create_trsp_authority(
+        options: &Options,
+        blocked_domains_set: ArcDomainsSet,
+    ) -> Result<(Arc<TrspAuthority>, Catalog), Box<dyn Error>> {
         let forwarder_config = &Handler::create_forwarder_config(options);
 
-        let trsp_authority = TrspAuthority::new(
+        let trsp_authority = Arc::new(TrspAuthority::new(
             blocked_domains_set,
             forwarder_config,
             &options,
-        )?;
+        ).await?);
         let mut catalog = Catalog::new();
         catalog.upsert(
             LowerName::new(&Name::root()),
-            Box::new(Arc::new(trsp_authority)),
+            Box::new(trsp_authority.clone()),
         );
-        return Ok(catalog)
+        return Ok((trsp_authority.clone(), catalog))
     }
 
     fn create_forwarder_config(options: &Options) -> ForwardConfig {
@@ -151,7 +165,7 @@ impl Handler {
             return Err(DnsError::InvalidMessageType(request.message_type()));
         }
         // TODO: Зачем тут OK
-        Ok(self.trsp_authority.handle_request(request, response).await)
+        Ok(self.catalog.handle_request(request, response).await)
     }
 }
 
