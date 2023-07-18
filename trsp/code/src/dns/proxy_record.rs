@@ -121,7 +121,7 @@ impl ProxyRecordSet {
     }
 
     pub fn ttl(&self) -> u32 {
-        let mut resolved_at_secs = self.resolved_secs_ago();
+        let resolved_at_secs = self.resolved_secs_ago();
 
         let mut ttl = 0;
         if self.ttl.as_secs() > resolved_at_secs {

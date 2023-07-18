@@ -10,7 +10,7 @@ use std::{
 use chrono::Utc;
 use std::time::Duration;
 use ipnet::Ipv4Net;
-use tokio::{sync::{RwLock, Mutex}, task::JoinHandle};
+use tokio::{sync::{RwLock, Mutex}, task::JoinHandle, time::sleep};
 use tracing::{debug, warn, error, info};
 
 
@@ -60,6 +60,7 @@ pub struct TrspAuthority {
     is_ipv6_mapping_enabled: bool,
     is_ipv6_forward_enabled: bool,
     cleanup_record_after_secs: Duration,
+    update_record_mutex: Mutex<()>,
     //forwarder_cache: RwLock<HashMap<LowerName, ForwarderCacheRecord>>,
 }
 
@@ -97,6 +98,7 @@ impl TrspAuthority {
             is_ipv6_mapping_enabled: options.dns_enable_ipv6_mapping,
             is_ipv6_forward_enabled: options.dns_enable_ipv6_forward,
             cleanup_record_after_secs: Duration::from_secs(options.dns_cleanup_record_after_secs),
+            update_record_mutex: Mutex::new(()),
             //forwarder_cache: RwLock::new(HashMap::with_capacity(FORWARDER_CACHE_SIZE)),
         };
         Ok(this)
@@ -227,7 +229,6 @@ impl TrspAuthority {
 
         let mut current_ips: Vec<IpAddr> = vec![];
         let mut lookup_ips: Vec<IpAddr> = vec![];
-        let mut lookup_cnames: Vec<IpAddr> = vec![];
 
 
         // Build lookup_ips vec
@@ -308,7 +309,7 @@ impl TrspAuthority {
             if record.record_type() == RecordType::CNAME {
                 let proxy_record = ProxyRecord::new(record, None, None);
                 if let Err(e) = record_set.push(&proxy_record) {
-                    error!(
+                    debug!(
                         "Record already exists ({}): r: {:?}, set: {:?}",
                         e, proxy_record, record_set,
                     );
@@ -336,7 +337,7 @@ impl TrspAuthority {
             );
 
             if let Err(e) = record_set.push(&proxy_record) {
-                error!(
+                debug!(
                     "Record already exists ({}): r: {:?}, set: {:?}",
                     e, proxy_record, record_set,
                 );
@@ -365,9 +366,15 @@ impl TrspAuthority {
 
         let inner_storage = self.inner_storage.read().await;
         if let Some(r) = inner_storage.find(name, rtype) {
+            //let lock = self.update_record_mutex.try_lock();
+            //if let Err(_) = lock {
+            //    info!("Update process is locked, return current records. Domain ({})", name)
+            //} else {
             drop(inner_storage);
             info!("Domain already exists, update: {} ; {}", name, rtype);
-            return self.update_record(name, rtype, &r).await
+            let record = self.update_record(name, rtype, &r).await;
+            return record
+
         }
         drop(inner_storage);
 
@@ -470,7 +477,12 @@ impl Authority for TrspAuthority {
                  ResolveErrorKind::Message("Not Found") => {
                     debug!("Not found '{}' {}' in internal storage", rtype, name);
                     if self.domains_set.is_domain_blocked(name.to_string().as_ref()).await {
-                        self.add_blocked_domain(name, rtype).await
+                        if let Ok(_) = self.update_record_mutex.try_lock() {
+                            self.add_blocked_domain(name, rtype).await
+                        } else {
+                            sleep(Duration::from_millis(5)).await;
+                            return self.lookup(name, rtype, _lookup_options).await
+                        }
                     } else {
                         // self.forwarder.lookup(name.clone(), rtype).await
                         self.forwarder_lookup(name.clone(), rtype).await
