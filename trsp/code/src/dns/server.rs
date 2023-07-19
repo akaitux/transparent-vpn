@@ -20,7 +20,6 @@ use reqwest::Url;
 use tracing::error;
 
 use super::{domains_set::{ArcDomainsSet, DomainsSet}, inner_storage::{InnerStorage, ArcInnerStorage}};
-use super::cleaner::Cleaner;
 
 
 
@@ -40,7 +39,6 @@ pub struct DnsServer {
     options: Options,
     workdir: PathBuf,
     domains_set: Option<ArcDomainsSet>,
-    cleaner: Option<Cleaner>,
 }
 
 
@@ -50,7 +48,6 @@ impl<'a> DnsServer {
             options: options.clone(),
             workdir: workdir.clone(),
             domains_set: None,
-            cleaner: None,
         }
     }
 

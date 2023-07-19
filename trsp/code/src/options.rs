@@ -136,7 +136,7 @@ pub struct Options {
     #[clap(
         long,
         help = "in seconds",
-        default_value = "120",
+        default_value = "3600",
         env = "TRSP_DNS_CLEANER_AFTER_TTL")
     ]
     pub dns_cleaner_after_ttl: u64,
@@ -144,7 +144,7 @@ pub struct Options {
     #[clap(
         long,
         help = "in seconds",
-        default_value = "600",
+        default_value = "3600",
         env = "TRSP_DNS_CLEANER_PERIOD")
     ]
     pub dns_cleaner_period: u64,

@@ -11,15 +11,17 @@ use trust_dns_server::proto::rr::{Record, RecordType, RData};
 pub struct ProxyRecord {
     pub original_addr: Option<IpAddr>,
     pub mapped_addr: Option<IpAddr>,
+    pub domain: String,
     pub record: Record,
     pub cleanup_at: Option<DateTime<Utc>>,
 }
 
 impl ProxyRecord {
-    pub fn new(record: &Record, original_addr: Option<IpAddr>, mapped_addr: Option<IpAddr>) -> Self {
+    pub fn new(record: &Record, original_addr: Option<IpAddr>, mapped_addr: Option<IpAddr>, domain: &str) -> Self {
         Self {
             original_addr,
             mapped_addr,
+            domain: String::from(domain),
             cleanup_at: None,
             record: record.clone(),
         }
@@ -27,6 +29,15 @@ impl ProxyRecord {
 
     pub fn mark_for_cleanup(&mut self, at: Duration) {
         self.cleanup_at = Some(Utc::now() + chrono::Duration::from_std(at).unwrap());
+    }
+
+    pub fn is_ready_for_cleanup(&self) -> bool {
+        if let Some(cleanup_at) = self.cleanup_at {
+            if Utc::now() > cleanup_at {
+                return false
+            }
+        }
+        true
     }
 
     pub fn rdata(&self) -> Option<&RData> {
@@ -75,13 +86,48 @@ impl ProxyRecordSet {
         }
     }
 
-    pub fn remove_record(&mut self, record: &ProxyRecord) {
+    pub fn remove_record(&mut self, record: ProxyRecord) {
         let index = self.records.iter().position(
             |x| x.original_addr == record.original_addr && x.mapped_addr == record.mapped_addr
         );
         if let Some(i) = index {
             self.records.remove(i);
         }
+    }
+
+    pub fn remove_all_records(&mut self) {
+        self.records.clear()
+    }
+
+    pub fn get_old_records(&self) -> Vec<ProxyRecord> {
+        let mut records: Vec<ProxyRecord> = vec![];
+        let now = Utc::now();
+        for record in self.records() {
+            if let Some(cleanup_at) = record.cleanup_at {
+                if cleanup_at > Utc::now() {
+                    records.push(record.clone())
+                }
+            }
+        }
+        records
+    }
+
+    pub fn remove_old_records(&mut self) -> Vec<ProxyRecord> {
+        let now = Utc::now();
+        let mut removed_records: Vec<ProxyRecord> = vec![];
+        let mut record_indices: Vec<usize> = vec![];
+        for (i, record) in self.records.iter().enumerate() {
+            if let Some(cleanup_at) = record.cleanup_at {
+                if cleanup_at > now {
+                    removed_records.push(record.clone());
+                    record_indices.push(i)
+                }
+            }
+        }
+        for i in record_indices {
+            self.records.remove(i);
+        }
+        removed_records
     }
 
     pub fn records(&self) -> &Vec<ProxyRecord> {

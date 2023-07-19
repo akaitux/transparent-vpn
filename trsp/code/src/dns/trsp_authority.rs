@@ -44,6 +44,8 @@ use super::{
     router::{Router, Iptables, VpnSubnet}, cleaner::Cleaner
 };
 
+pub type AvailableIpv4Ips = Arc<RwLock<VecDeque<Ipv4Addr>>>;
+
 
 pub struct TrspAuthority {
     options: Options,
@@ -52,7 +54,7 @@ pub struct TrspAuthority {
     forwarder: Arc<TokioAsyncResolver>,
     inner_storage: ArcInnerStorage,
     mapping_ipv4_subnet: Ipv4Net,
-    available_ipv4_inner_ips: RwLock<VecDeque<Ipv4Addr>>,
+    available_ipv4_inner_ips: AvailableIpv4Ips,
     router: Arc<Mutex<dyn Router>>,
     max_positive_ttl: Duration,
     max_negative_ttl: Duration,
@@ -60,8 +62,7 @@ pub struct TrspAuthority {
     is_ipv6_mapping_enabled: bool,
     is_ipv6_forward_enabled: bool,
     cleanup_record_after_secs: Duration,
-    update_record_mutex: Mutex<()>,
-    //forwarder_cache: RwLock<HashMap<LowerName, ForwarderCacheRecord>>,
+    update_mutex: Arc<Mutex<()>>,
 }
 
 
@@ -90,7 +91,7 @@ impl TrspAuthority {
             forwarder,
             inner_storage: inner_storage.clone() ,
             mapping_ipv4_subnet,
-            available_ipv4_inner_ips: RwLock::new(VecDeque::from_iter(mapping_ipv4_subnet.hosts())),
+            available_ipv4_inner_ips: Arc::new(RwLock::new(VecDeque::from_iter(mapping_ipv4_subnet.hosts()))),
             router,
             max_positive_ttl: Duration::from_secs(options.dns_positive_max_ttl),
             max_negative_ttl: Duration::from_secs(options.dns_negative_max_ttl),
@@ -98,8 +99,7 @@ impl TrspAuthority {
             is_ipv6_mapping_enabled: options.dns_enable_ipv6_mapping,
             is_ipv6_forward_enabled: options.dns_enable_ipv6_forward,
             cleanup_record_after_secs: Duration::from_secs(options.dns_cleanup_record_after_secs),
-            update_record_mutex: Mutex::new(()),
-            //forwarder_cache: RwLock::new(HashMap::with_capacity(FORWARDER_CACHE_SIZE)),
+            update_mutex: Arc::new(Mutex::new(())),
         };
         Ok(this)
     }
@@ -107,6 +107,8 @@ impl TrspAuthority {
     pub fn create_cleaner(
         inner_storage: ArcInnerStorage,
         router: Arc<Mutex<dyn Router>>,
+        available_ipv4s: AvailableIpv4Ips,
+        update_mutex: Arc<Mutex<()>>,
         options: &Options
     ) -> Cleaner
     {
@@ -115,13 +117,21 @@ impl TrspAuthority {
         Cleaner::new(
             inner_storage,
             router,
+            available_ipv4s,
+            update_mutex,
             &clear_after_ttl,
             &clear_period,
         )
     }
 
     pub fn run_cleaner(&self) -> JoinHandle<()> {
-        let cleaner = Self::create_cleaner(self.inner_storage.clone(), self.router.clone(), &self.options);
+        let cleaner = Self::create_cleaner(
+            self.inner_storage.clone(),
+            self.router.clone(),
+            self.available_ipv4_inner_ips.clone(),
+            self.update_mutex.clone(),
+            &self.options
+        );
         tokio::spawn(cleaner.block_until_done())
     }
 
@@ -307,7 +317,7 @@ impl TrspAuthority {
             }
 
             if record.record_type() == RecordType::CNAME {
-                let proxy_record = ProxyRecord::new(record, None, None);
+                let proxy_record = ProxyRecord::new(record, None, None, &record_set.domain);
                 if let Err(e) = record_set.push(&proxy_record) {
                     debug!(
                         "Record already exists ({}): r: {:?}, set: {:?}",
@@ -334,6 +344,7 @@ impl TrspAuthority {
                 record,
                 Some(ip_addr),
                 Some(mapped_ip.into()),
+                &record_set.domain,
             );
 
             if let Err(e) = record_set.push(&proxy_record) {
@@ -366,14 +377,9 @@ impl TrspAuthority {
 
         let inner_storage = self.inner_storage.read().await;
         if let Some(r) = inner_storage.find(name, rtype) {
-            //let lock = self.update_record_mutex.try_lock();
-            //if let Err(_) = lock {
-            //    info!("Update process is locked, return current records. Domain ({})", name)
-            //} else {
             drop(inner_storage);
             info!("Domain already exists, update: {} ; {}", name, rtype);
-            let record = self.update_record(name, rtype, &r).await;
-            return record
+            return self.update_record(name, rtype, &r).await
 
         }
         drop(inner_storage);
@@ -477,7 +483,7 @@ impl Authority for TrspAuthority {
                  ResolveErrorKind::Message("Not Found") => {
                     debug!("Not found '{}' {}' in internal storage", rtype, name);
                     if self.domains_set.is_domain_blocked(name.to_string().as_ref()).await {
-                        if let Ok(_) = self.update_record_mutex.try_lock() {
+                        if let Ok(_) = self.update_mutex.try_lock() {
                             self.add_blocked_domain(name, rtype).await
                         } else {
                             sleep(Duration::from_millis(5)).await;

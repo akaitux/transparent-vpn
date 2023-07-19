@@ -1,10 +1,11 @@
 use std::{
     error::Error,
     collections::HashMap,
-    sync::Arc,
+    sync::Arc, borrow::BorrowMut,
 };
 
 
+use chrono::Utc;
 use tokio::sync::RwLock;
 use trust_dns_server::client::rr::{LowerName, RecordType, RrKey};
 
@@ -16,7 +17,7 @@ pub type ArcInnerStorage = Arc<RwLock<InnerStorage>>;
 
 #[derive(Default)]
 pub struct InnerStorage {
-    records: HashMap<RrKey, Arc<ProxyRecordSet>>,
+    records: HashMap<RrKey, ProxyRecordSet>,
     // internal_ip_to_record: HashMap<IpAddr, RrKey>,
 }
 
@@ -29,12 +30,30 @@ impl InnerStorage {
         }
     }
 
-    pub fn find(&self, name: &LowerName, rtype: RecordType) -> Option<Arc<ProxyRecordSet>> {
+    pub fn find(&self, name: &LowerName, rtype: RecordType) -> Option<ProxyRecordSet> {
         self.inner_lookup(name, rtype)
     }
 
-    pub fn records(&self) -> &HashMap<RrKey, Arc<ProxyRecordSet>> {
+    pub fn records(&self) -> &HashMap<RrKey, ProxyRecordSet> {
         &self.records
+    }
+
+    pub fn records_mut(&mut self) -> &mut HashMap<RrKey, ProxyRecordSet> {
+        &mut self.records
+    }
+
+    pub fn cleanup_record_set(&mut self, rrkey: &RrKey) {
+        if let Some(record_set) = self.records.get_mut(rrkey) {
+            record_set.remove_old_records();
+            //let mut new_record_set = record_set.clone();
+            //new_record_set.remove_all_records();
+            //for record in record_set.records() {
+            //    if record.is_ready_for_cleanup() {
+            //        new_record_set.push(record);
+            //    }
+            //}
+            //self.records.insert(rrkey.clone(), Arc::new(new_record_set));
+        }
     }
 
     pub fn remove(&mut self, rrkey: &RrKey) {
@@ -50,9 +69,9 @@ impl InnerStorage {
         &mut self,
         name: &LowerName,
         rtype: RecordType,
-        records_set: &ProxyRecordSet
-    ) -> Result<Arc<ProxyRecordSet>, Box<dyn Error>> {
-        let records_set = Arc::from(records_set.clone());
+        record_set: &ProxyRecordSet
+    ) -> Result<ProxyRecordSet, Box<dyn Error>> {
+        let records_set = record_set.clone();
         self.records.insert(
             RrKey::new(name.clone(), rtype.clone()),
             records_set.clone(),
@@ -64,7 +83,7 @@ impl InnerStorage {
         &self,
         name: &LowerName,
         rtype: RecordType,
-    ) -> Option<Arc<ProxyRecordSet>> {
+    ) -> Option<ProxyRecordSet> {
         // this range covers all the records for any of the RecordTypes at a given label.
         let rrkey = RrKey::new(name.clone(), rtype.clone());
 
@@ -92,84 +111,5 @@ impl InnerStorage {
         //}
         None
     }
-
-    // Inserts or updates a `Record` depending on it's existence in the authority.
-    //
-    // Guarantees that SOA, CNAME only has one record, will implicitly update if they already exist.
-    //
-    // # Arguments
-    //
-    // * `record` - The `Record` to be inserted or updated.
-    // * `serial` - Current serial number to be recorded against updates.
-    //
-    // # Return value
-    //
-    // true if the value was inserted, false otherwise
-    //fn _upsert(&mut self, record: Record, serial: u32, dns_class: DNSClass) -> bool {
-    //    if dns_class != record.dns_class() {
-    //        warn!(
-    //            "mismatched dns_class on record insert, zone: {} record: {}",
-    //            dns_class,
-    //            record.dns_class()
-    //        );
-    //        return false;
-    //    }
-
-    //    fn is_nsec(_upsert_type: RecordType, _occupied_type: RecordType) -> bool {
-    //        // TODO: we should make the DNSSEC RecordTypes always visible
-    //        false
-    //    }
-
-    //    /// returns true if an only if the label can not co-occupy space with the checked type
-    //    #[allow(clippy::nonminimal_bool)]
-    //    fn label_does_not_allow_multiple(
-    //        upsert_type: RecordType,
-    //        occupied_type: RecordType,
-    //        check_type: RecordType,
-    //    ) -> bool {
-    //        // it's a CNAME/ANAME but there's a record that's not a CNAME/ANAME at this location
-    //        (upsert_type == check_type && occupied_type != check_type) ||
-    //            // it's a different record, but there is already a CNAME/ANAME here
-    //            (upsert_type != check_type && occupied_type == check_type)
-    //    }
-
-    //    // check that CNAME and ANAME is either not already present, or no other records are if it's a CNAME
-    //    let start_range_key =
-    //        RrKey::new(record.name().into(), RecordType::Unknown(u16::min_value()));
-    //    let end_range_key = RrKey::new(record.name().into(), RecordType::Unknown(u16::max_value()));
-
-    //    let multiple_records_at_label_disallowed = self
-    //        .records
-    //        .range(&start_range_key..&end_range_key)
-    //        // remember CNAME can be the only record at a particular label
-    //        .any(|(key, _)| {
-    //            !is_nsec(record.record_type(), key.record_type)
-    //                && label_does_not_allow_multiple(
-    //                    record.record_type(),
-    //                    key.record_type,
-    //                    RecordType::CNAME,
-    //                )
-    //        });
-
-    //    if multiple_records_at_label_disallowed {
-    //        // consider making this an error?
-    //        return false;
-    //    }
-
-    //    let rr_key = RrKey::new(record.name().into(), record.rr_type());
-    //    let records: &mut Arc<RecordSet> = self
-    //        .records
-    //        .entry(rr_key)
-    //        .or_insert_with(|| Arc::new(RecordSet::new(record.name(), record.rr_type(), serial)));
-
-    //    // because this is and Arc, we need to clone and then replace the entry
-    //    let mut records_clone = RecordSet::clone(&*records);
-    //    if records_clone.insert(record, serial) {
-    //        *records = Arc::new(records_clone);
-    //        true
-    //    } else {
-    //        false
-    //    }
-    //}
 }
 

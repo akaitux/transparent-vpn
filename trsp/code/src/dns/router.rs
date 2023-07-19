@@ -25,7 +25,9 @@ macro_rules! vec_of_strings {
 pub trait Router: Send + Sync {
     fn create_chain(&self) -> Result<(), String>;
     fn add_route(&self, record_set: &ProxyRecordSet) -> Result<(), Box<dyn Error>>;
-    fn del_route(&self, record_set: &ProxyRecordSet) -> Result<(), Box<dyn Error>>;
+    fn remove_record(&self, record_set: &ProxyRecord) -> Result<(), Box<dyn Error>>;
+    fn remove_record_set(&self, record_set: &ProxyRecordSet) -> Result<(), Box<dyn Error>>;
+    fn remove_old_records(&self, record_set: &mut ProxyRecordSet) -> Result<Vec<ProxyRecord>, Box<dyn Error>>;
     fn routes_list(&self) -> Result<Vec<ProxyRecordSet>, Box<dyn Error>>;
     fn cleanup(&self) -> Result<(), String>;
 }
@@ -101,9 +103,9 @@ impl Iptables {
         self.exec("ip6tables", cmd)
     }
 
-    fn generate_comment(record_set: &ProxyRecordSet) -> String {
+    fn generate_comment(record: &ProxyRecord) -> String {
         //let resolved_at = record_set.resolved_at.to_string().replace(" ", "_");
-        format!("{}", record_set.domain)
+        format!("{}", record.domain)
     }
 
     fn parse_comment(iptables_line: &str) -> Result<(ProxyRecord, String), String> {
@@ -225,7 +227,6 @@ impl Router for Iptables {
 
     fn add_route(&self, record_set: &ProxyRecordSet) -> Result<(), Box<dyn Error>> {
         debug!("ADD ROUTE: {:?}", record_set);
-        let comment = Iptables::generate_comment(record_set);
         for record in record_set.records() {
             if ! record.is_routable() {
                 continue
@@ -234,6 +235,7 @@ impl Router for Iptables {
                 info!("Skip add route for record {:?}: cleanup_at not empty", record);
                 continue
             }
+            let comment = Iptables::generate_comment(record);
             let cmd = self.gen_route_rule(record, &comment, "check");
             let check_output = match record.original_addr.unwrap() {
                 IpAddr::V4(_) => {self.exec_ipv4(&cmd)},
@@ -280,32 +282,50 @@ impl Router for Iptables {
         Ok(())
     }
 
-    fn del_route(&self, record_set: &ProxyRecordSet) -> Result<(), Box<dyn Error>> {
+    fn remove_record_set(&self, record_set: &ProxyRecordSet) -> Result<(), Box<dyn Error>> {
         debug!("DEL ROUTE: {:?}", record_set);
-        let comment = Iptables::generate_comment(record_set);
         for record in record_set.records() {
-            if ! record.is_routable() {
-                continue
-            }
-            let cmd = self.gen_route_rule(record, &comment, "del");
-            let output = match record.original_addr.unwrap() {
-                IpAddr::V4(_) => {self.exec_ipv4(&cmd)},
-                IpAddr::V6(_) => {self.exec_ipv6(&cmd)},
-            };
-            match output {
-                Ok(_) => {
-                    info!("Delete route for domain '{}': '{}'", record_set.domain, cmd.join(" "));
-                },
-                Err(e) => {
-                    error!(
-                        "Error while deleting route for domain '{}' ('{}'): {}",
-                        record_set.domain, cmd.join(" "), e
-                    );
-                    return Err(e.into())
-                }
-            }
+            self.remove_record(record)?
         }
        Ok(())
+    }
+
+    fn remove_old_records(&self, record_set: &mut ProxyRecordSet) -> Result<Vec<ProxyRecord>, Box<dyn Error>> {
+        let old_records = record_set.remove_old_records();
+
+        for record in &old_records {
+            if record.mapped_addr.is_none() {
+                continue
+            }
+            self.remove_record(&record)?;
+        }
+        Ok(old_records)
+    }
+
+    fn remove_record(&self, record: &ProxyRecord) -> Result<(), Box<dyn Error>> {
+        if ! record.is_routable() {
+           return Ok(())
+        }
+        let comment = Iptables::generate_comment(record);
+        let cmd = self.gen_route_rule(record, &comment, "del");
+        let output = match record.original_addr.unwrap() {
+            IpAddr::V4(_) => {self.exec_ipv4(&cmd)},
+            IpAddr::V6(_) => {self.exec_ipv6(&cmd)},
+        };
+        match output {
+            Ok(_) => {
+                info!("Delete route for domain: '{}'", cmd.join(" "));
+                Ok(())
+            },
+            Err(e) => {
+                error!(
+                    "Error while deleting route: ('{}'): {}",
+                    cmd.join(" "), e
+                );
+                Err(e.into())
+            }
+        }
+
     }
 
     fn routes_list(&self) -> Result<Vec<ProxyRecordSet>, Box<dyn Error>> {
