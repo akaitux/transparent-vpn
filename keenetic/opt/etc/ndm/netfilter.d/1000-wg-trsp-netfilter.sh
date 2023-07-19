@@ -1,11 +1,18 @@
 #!/bin/sh
 
+[ "$type" == "ip6tables" ] && exit 0   # check the protocol type in backward-compatible way
+[ "$table" != "nat" ] && exit 0   # check the table name
+
+
 DNSMASQ_CONF="/opt/etc/dnsmasq.conf"
 DNSMASQ_INITD="/opt/etc/init.d/S56dnsmasq"
 DNSMASQ_DNS="127.0.0.1:65053"
-WG_DNS="10.224.0.1"
 
-iptables_cmd="PREROUTING -t nat -p udp -m udp --dport 53 -j DNAT --to-destination $DNSMASQ_DNS"
+WG_DNS="10.224.0.1:53"
+
+#iptables_cmd="PREROUTING -t nat -p udp -m udp --dport 53 -j DNAT --to-destination $DNSMASQ_DNS"
+
+iptables_cmd="PREROUTING -t nat -p udp -m udp --dport 53 -j DNAT --to-destination $WG_DNS"
 iptables_add_cmd="iptables -I $iptables_cmd"
 iptables_check_cmd="iptables -C $iptables_cmd"
 iptables_del_cmd="iptables -D $iptables_cmd"
