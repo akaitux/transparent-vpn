@@ -229,9 +229,11 @@ impl TrspAuthority {
         -> Result<Lookup, ResolveError>
     {
         // TODO UPDATE
+        // TODO BUG WITH OLD IPS IF DNS RECORDS CHANGED
         let lookup = self.forwarder.lookup(name, rtype).await?;
         let lookup_time = Utc::now();
 
+        let mut available_ipv4s = self.available_ipv4_inner_ips.write().await;
         let mut inner_storage = self.inner_storage.write().await;
 
         let mut record_set =  record_set.clone();
@@ -259,6 +261,7 @@ impl TrspAuthority {
             }
         }
 
+
         for record in record_set.records_mut() {
             if let Some(ip) = record.original_addr {
                 current_ips.push(ip);
@@ -271,18 +274,21 @@ impl TrspAuthority {
             }
         }
 
-        let mut available_ipv4s = self.available_ipv4_inner_ips.write().await;
         self.add_records_to_record_set(&mut record_set, &lookup, &mut *available_ipv4s)?;
 
-        if let Err(e) = self.router.lock().await.add_route(&record_set) {
-            error!("add_blocked_domain: Error while adding route '{:?}': {}", record_set, e);
+        let router = self.router.lock().await;
+        if let Err(e) = router.add_route(&record_set) {
+            error!("Error while adding route '{:?}': {}", record_set, e);
             for record in record_set.records() {
                 match record.mapped_addr {
                     Some(IpAddr::V4(a)) => available_ipv4s.push_front(a),
                     _ => {}
                 }
             }
-            return Err(ResolveError::from("internal_error"))
+            if let Err(e) = router.remove_record_set(&record_set) {
+                error!("Error while deleting route: {}", e);
+                return Err(ResolveError::from("internal_error"))
+            }
         }
 
         if let Err(e) = inner_storage.upsert(name, rtype, &record_set) {
@@ -298,7 +304,6 @@ impl TrspAuthority {
             }
             return Err(ResolveError::from("error_while_push_records_set"))
         }
-
         Ok(self.build_lookup(name, rtype, &record_set))
     }
 

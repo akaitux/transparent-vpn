@@ -52,10 +52,11 @@ impl<'a> Cleaner {
 
     async fn cleaner_tick(&self) {
         info!("Cleaner started...");
-        let mut rsets_trash: HashMap<RrKey, ProxyRecordSet> = HashMap::new();
 
         let mut inner_storage = self.inner_storage.write().await;
         let mut available_ipv4_ips = self.available_ipv4_ips.write().await;
+
+        let mut rsets_trash: HashMap<RrKey, ProxyRecordSet> = HashMap::new();
 
         // Make trash with record sets for complete deletion
         // and vector with rrkey of record sets for partialy records cleanup inside them

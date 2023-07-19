@@ -1,5 +1,5 @@
 use clap::Parser;
-use std::{net::SocketAddr, time::Duration};
+use std::net::SocketAddr;
 use ipnet::Ipv4Net;
 
 #[derive(Parser, Debug, Clone)]
@@ -49,6 +49,13 @@ pub struct Options {
         env = "TRSP_DNS_TCP_TIMEOUT")
     ]
     pub dns_tcp_timeout: u8,
+
+    #[clap(
+        long,
+        default_value_t = 32,
+        env = "TRSP_DNS_FORWARDER_CACHE_SIZE")
+    ]
+    pub dns_forwarder_cache_size: usize,
 
     #[clap(
         long,

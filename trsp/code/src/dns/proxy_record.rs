@@ -124,8 +124,11 @@ impl ProxyRecordSet {
                 }
             }
         }
+
+        let mut rm_counter = 0;
         for i in record_indices {
-            self.records.remove(i);
+            self.records.remove(i - rm_counter);
+            rm_counter = rm_counter + 1;
         }
         removed_records
     }

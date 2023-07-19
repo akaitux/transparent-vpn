@@ -25,7 +25,7 @@ macro_rules! vec_of_strings {
 pub trait Router: Send + Sync {
     fn create_chain(&self) -> Result<(), String>;
     fn add_route(&self, record_set: &ProxyRecordSet) -> Result<(), Box<dyn Error>>;
-    fn remove_record(&self, record_set: &ProxyRecord) -> Result<(), Box<dyn Error>>;
+    fn remove_record(&self, record: &ProxyRecord) -> Result<(), Box<dyn Error>>;
     fn remove_record_set(&self, record_set: &ProxyRecordSet) -> Result<(), Box<dyn Error>>;
     fn remove_old_records(&self, record_set: &mut ProxyRecordSet) -> Result<Vec<ProxyRecord>, Box<dyn Error>>;
     fn routes_list(&self) -> Result<Vec<ProxyRecordSet>, Box<dyn Error>>;
@@ -297,7 +297,9 @@ impl Router for Iptables {
             if record.mapped_addr.is_none() {
                 continue
             }
-            self.remove_record(&record)?;
+            if let Err(e) = self.remove_record(&record) {
+                error!("Error while removing record from router: {}", e)
+            }
         }
         Ok(old_records)
     }
@@ -319,7 +321,7 @@ impl Router for Iptables {
             },
             Err(e) => {
                 error!(
-                    "Error while deleting route: ('{}'): {}",
+                    "Error while removing route: ('{}'): {}",
                     cmd.join(" "), e
                 );
                 Err(e.into())

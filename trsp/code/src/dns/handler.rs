@@ -145,6 +145,7 @@ impl Handler {
         resolver_options.negative_max_ttl = Some(Duration::from_secs(options.dns_negative_max_ttl));
         resolver_options.positive_min_ttl = Some(Duration::from_secs(options.dns_positive_min_ttl));
         resolver_options.negative_min_ttl = Some(Duration::from_secs(options.dns_negative_min_ttl));
+        resolver_options.cache_size = options.dns_forwarder_cache_size;
         return ForwardConfig{
                 name_servers,
                 options: Some(resolver_options),
