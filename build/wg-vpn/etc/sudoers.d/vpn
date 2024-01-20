@@ -1,2 +1,0 @@
-vpn ALL=(root) NOPASSWD:/usr/bin/pkill kresd
-vpn ALL=(root) NOPASSWD:/usr/sbin/iptables

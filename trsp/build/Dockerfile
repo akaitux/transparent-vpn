@@ -32,6 +32,7 @@ RUN \
     iptables \
     iproute2 \
     dnsutils \
+    shadowsocks-libev \
     && wget -O /tmp/s6-overlay-noarch.tar.xz https://github.com/just-containers/s6-overlay/releases/download/v${S6_OVERLAY_VERSION}/s6-overlay-noarch.tar.xz \
     && wget -O /tmp/s6-overlay-x86_64.tar.xz https://github.com/just-containers/s6-overlay/releases/download/v${S6_OVERLAY_VERSION}/s6-overlay-x86_64.tar.xz \
     && tar -C / -Jxpf /tmp/s6-overlay-noarch.tar.xz \
@@ -47,7 +48,6 @@ COPY build/etc/cont-init.d /etc/cont-init.d
 RUN find /etc/cont-init.d -exec chmod ug+x {} \;
 COPY build/etc/services.d /etc/services.d
 RUN find /etc/services.d -exec chmod ug+x {} \;
-COPY build/etc/sudoers.d /etc/sudoers.d/
 COPY build/opt/wireguard /opt/wireguard
 COPY build/etc/crontab /etc/crontab
 

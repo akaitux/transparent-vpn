@@ -1,8 +1,0 @@
-#!/command/with-contenv bash
-
-iptables -N azvpnwhitelist
-iptables -t nat -N dnsmap
-iptables -t nat -A PREROUTING -s 10.224.0.0/15 -d 10.224.0.0/15 -j dnsmap
-iptables -t nat -I PREROUTING -s 10.224.0.0/24 ! -d 10.224.0.1 -p udp --dport 53 -m u32 --u32 '0x1C & 0xFFCF = 0x0100 && 0x1E & 0xFFFF = 0x0001' -j REDIRECT --to-port 53
-saddr $VPNUDP_RANGE daddr ! $VPNUDP_DNS proto udp dport 53 mod u32 u32 '0x1C & 0xFFCF = 0x0100 && 0x1E & 0xFFFF = 0x0001' REDIRECT to-ports 53;
-

@@ -18,11 +18,15 @@ services:
     volumes:
       - wireguard_config:/opt/wireguard/config
       - trsp:/opt/trsp
+      - shadowsocks:/opt/shadowsocks-libev
     sysctls:
       - net.ipv4.conf.all.src_valid_mark=1
     ports:
       - 0.0.0.0:51821:51821/udp
+      - 0.0.0.0:51830:51830/udp
+      - 0.0.0.0:51830:51830/tcp
 volumes:
   wireguard_config:
   trsp:
+  shadowsocks:
 

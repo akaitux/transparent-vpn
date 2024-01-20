@@ -17,6 +17,7 @@ services:
 
     volumes:
     # - /lib/modules:/lib/modules
+      - shadowsocks-libev:/opt/shadowsocks-libev
       - wireguard_config:/opt/wireguard/config
       - knot_db:/var/lib/knot-resolver/storage
       - knot_aliases:/etc/knot-resolver/aliases
@@ -25,6 +26,8 @@ services:
       - net.ipv4.conf.all.src_valid_mark=1
     ports:
       - 0.0.0.0:51820:51820/udp
+      - 0.0.0.0:51830:51830/udp
+      - 0.0.0.0:51830:51830/tcp
 volumes:
   wireguard_config:
   knot_db:

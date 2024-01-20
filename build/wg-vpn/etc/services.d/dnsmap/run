@@ -1,2 +1,0 @@
-#!/command/with-contenv bash
-cd /opt/dnsmap && nohup ./proxy.py -a 127.0.0.4 --iprange 10.224.0.0/15 --upstream ${DNSMAP_DNS_UPSTREAM:-1.1.1.1:53}
