@@ -43,3 +43,58 @@ VPN
 
 
 WG_INTERNAL_SUBNET:-10.224.0.0/15
+
+### Shadowsocks
+
+На роутере:
+
+1.
+
+```
+opkg install shadowsocks-libev-ss-tunnel shadowsocks-libev-config
+```
+
+2.
+
+```
+vi /opt/etc/shadowsocks.json
+```
+
+```json
+{
+"server": "{server-ip}",
+"mode":"tcp_and_udp",
+"server_port": "{server-port}",
+"local_address": "127.0.0.1",
+"local_port": "{local-port}",
+"password": "{password}",
+"timeout":300,
+"method":"chacha20-ietf-poly1305",
+"tunnel_address": "127.0.0.1:{wireguard-port}"
+}
+```
+
+где `{server-port}` и `{password}` это те же самые, которые добавили на сервер в пункте 1.2
+
+`{server-ip}` - ip адрес сервера на котором крутится wireguard и ss
+
+`{local-port}` - любой свободный порт на роутере, который мы будем указывать в настройках wg соединения, например 51822
+
+`{wireguard-port}` - это порт на котором на сервере крутится wg соединение, например 51820
+
+3.
+
+```
+vi /opt/etc/init.d/S22shadowsocks
+```
+
+меняем на строку PROCS=ss-* на PROCS=ss-tunnel
+
+перезапускаем ss на роутере и проверяем, что работает
+
+/opt/etc/init.d/S22shadowsocks restart
+
+/opt/etc/init.d/S22shadowsocks check
+
+Идем в веб морду роутера, в настройки нужного wg соединения и в пире вместо {server-ip}:{wireguard-port} вставляем 127.0.0.1:{local-port}
+
