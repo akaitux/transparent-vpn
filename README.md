@@ -88,13 +88,24 @@ vi /opt/etc/shadowsocks.json
 vi /opt/etc/init.d/S22shadowsocks
 ```
 
-меняем на строку PROCS=ss-* на PROCS=ss-tunnel
+меняем на строку
+
+```
+PROCS=ss-*
+```
+
+на
+
+```
+PROCS=ss-tunnel
+```
 
 перезапускаем ss на роутере и проверяем, что работает
 
+```
 /opt/etc/init.d/S22shadowsocks restart
-
 /opt/etc/init.d/S22shadowsocks check
+```
 
 Идем в веб морду роутера, в настройки нужного wg соединения и в пире вместо {server-ip}:{wireguard-port} вставляем 127.0.0.1:{local-port}
 
