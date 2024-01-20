@@ -64,13 +64,13 @@ vi /opt/etc/shadowsocks.json
 {
 "server": "{server-ip}",
 "mode":"tcp_and_udp",
-"server_port": "{server-port}",
+"server_port": "{server-port:-51830}",
 "local_address": "127.0.0.1",
-"local_port": "{local-port}",
+"local_port": "{local-port:-51830}",
 "password": "{password}",
 "timeout":300,
 "method":"chacha20-ietf-poly1305",
-"tunnel_address": "127.0.0.1:{wireguard-port}"
+"tunnel_address": "127.0.0.1:{wireguard-port:-51820}"
 }
 ```
 
