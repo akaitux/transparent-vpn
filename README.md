@@ -74,7 +74,7 @@ vi /opt/etc/shadowsocks.json
 }
 ```
 
-где `{server-port}` и `{password}` это те же самые, которые добавили на сервер в пункте 1.2
+`{password}` - генерируется при первом старте контейнера, можно взять в volumes/shadowsocks/p
 
 `{server-ip}` - ip адрес сервера на котором крутится wireguard и ss
 
