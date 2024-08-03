@@ -9,7 +9,6 @@ use std::{
 use tracing::{debug, info, error, warn};
 use tokio_stream::StreamExt;
 use reqwest::Url;
-use thiserror::__private::PathAsDisplay;
 use encoding_rs::WINDOWS_1251;
 use lazy_static::lazy_static;
 use regex::Regex;
@@ -181,7 +180,7 @@ impl DomainsSet {
             err.push(e.to_string());
         }
         let tmp_dir = env::temp_dir();
-        debug!("Temp dir for downloads is {}", tmp_dir.as_path().as_display());
+        debug!("Temp dir for downloads is {}", tmp_dir.as_path().display());
 
         let start = Instant::now();
         self.download_zapret_csv_domains().await?;
@@ -214,7 +213,7 @@ impl DomainsSet {
     {
         warn!(
             "Load domains from cache file: {}",
-            &cache_filepath.as_path().as_display(),
+            &cache_filepath.as_path().display(),
         );
         return domains.read_from_file(cache_filepath).await
 
@@ -287,7 +286,7 @@ impl DomainsSet {
         imported_domains.write_to_file(&cache_filepath).await?;
         info!(
             "Download domains csv file completed {}, errors: {}",
-            cache_filepath.as_path().as_display(),
+            cache_filepath.as_path().display(),
             errors_count,
         );
         Ok(())
@@ -327,7 +326,7 @@ impl DomainsSet {
                 error!("Load nxdomains error: {}", err);
                 warn!(
                     "Load nxdomains from cache file: {}",
-                    &cache_filepath.as_path().as_display()
+                    &cache_filepath.as_path().display()
                 );
                 self.load_domains_from_cache(&mut cached_domains, &cache_filepath).await?;
                 return self.remove_nx_domains_from_imported(&cached_domains).await
@@ -354,7 +353,7 @@ impl DomainsSet {
         imported_domains.write_to_file(&cache_filepath).await?;
         info!(
             "Download nxdomains txt file completed: {}",
-            cache_filepath.as_path().as_display(),
+            cache_filepath.as_path().display(),
         );
         Ok(())
     }
@@ -400,7 +399,7 @@ fn prepare_domain_name(domain: &String) -> String {
 // async fn download(url: &Url, write_domains_to_filepath: &PathBuf)
 // -> Result<(), Box<dyn Error>>
 // {
-//     debug!("Download file to {}", write_domains_to_filepath.as_path().as_display());
+//     debug!("Download file to {}", write_domains_to_filepath.as_path().display());
 //     let mut file = File::create(&write_domains_to_filepath).await?;
 //
 //     let response = reqwest::get(url.clone()).await

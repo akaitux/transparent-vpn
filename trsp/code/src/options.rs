@@ -37,6 +37,7 @@ pub struct Options {
 
     #[clap(
         long,
+        default_value = "0.0.0.0:53",
         value_delimiter = ';',
         env = "TRSP_DNS_TCP")
     ]
