@@ -90,6 +90,8 @@ impl DerefMut for Domains {
     }
 }
 
+
+#[allow(dead_code)]
 impl Domains {
     pub fn new(hashset_cap: Option<usize>) -> Self {
         Self {
@@ -126,7 +128,7 @@ impl Domains {
                 file.write(buf.join("\n").as_bytes()).await?;
                 buf.clear();
             }
-            buf.push(domain.as_str().clone());
+            buf.push(domain.as_str());
         }
         if buf.len() != 0 {
             file.write(buf.join("\n").as_bytes()).await?;

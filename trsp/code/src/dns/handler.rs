@@ -1,14 +1,15 @@
 use std::{net::SocketAddr, sync::Arc, time::Duration};
 
 use crate::options::Options;
-use trust_dns_server::{
+use hickory_server::{
     proto::op::{Header, OpCode, MessageType, ResponseCode},
     server::{Request, RequestHandler, ResponseHandler, ResponseInfo},
     store::forwarder::ForwardConfig,
-    client::rr::{LowerName, Name},
     resolver::config::{NameServerConfigGroup, ResolverOpts},
     authority::Catalog,
 };
+
+use hickory_proto::rr::{LowerName, Name};
 use tracing::error;
 
 use super::domains_set::ArcDomainsSet;
@@ -16,6 +17,7 @@ use super::trsp_authority::TrspAuthority;
 use std::error::Error;
 
 
+#[allow(dead_code)]
 #[derive(thiserror::Error, Debug)]
 pub enum DnsError {
     #[error("Invalid OpCode {0:}")]
@@ -36,6 +38,7 @@ pub struct Handler {
 }
 
 
+#[allow(dead_code)]
 impl Handler {
     pub fn new(options: &Options, domains: ArcDomainsSet) -> Result<Self, Box<dyn Error>> {
         // https://github.com/bluejekyll/trust-dns/blob/main/crates/resolver/src/config.rs

@@ -5,7 +5,7 @@ use std::{
 use chrono::{DateTime, Utc};
 use tracing::error;
 
-use trust_dns_server::proto::rr::{Record, RecordType, RData};
+use hickory_server::proto::rr::{Record, RecordType, RData};
 
 #[derive(Eq, PartialEq, Debug, Clone)]
 pub struct ProxyRecord {
@@ -38,7 +38,7 @@ impl ProxyRecord {
     }
 
     pub fn is_cname(&self) -> bool {
-        if self.record.rr_type() == RecordType::CNAME {
+        if self.record.record_type() == RecordType::CNAME {
             return true
         }
         false
@@ -75,6 +75,7 @@ impl ProxyRecordSet {
         }
     }
 
+    #[allow(dead_code)]
     pub fn remove_record(&mut self, record: &ProxyRecord) {
         let index = self.records.iter().position(
             |x| x.original_addr == record.original_addr && x.mapped_addr == record.mapped_addr
@@ -169,10 +170,12 @@ impl ProxyRecordSet {
                 .set_record_type(pr.record.record_type());
 
             if let Some(IpAddr::V4(ip)) = pr.mapped_addr {
+                let ip = ip.try_into().unwrap();
                 let rdata = RData::A(ip);
                 r.set_data(Some(rdata));
             }
             if let Some(IpAddr::V6(ip)) = pr.mapped_addr {
+                let ip = ip.try_into().unwrap();
                 let rdata = RData::AAAA(ip);
                 r.set_data(Some(rdata));
             }

@@ -22,6 +22,7 @@ macro_rules! vec_of_strings {
 
 
 
+#[allow(dead_code)]
 pub trait Router: Send + Sync {
     fn create_chain(&self) -> Result<(), String>;
     fn add_route(&self, record_set: &ProxyRecordSet) -> Result<(), Box<dyn Error>>;
@@ -38,6 +39,7 @@ pub struct Iptables {
     mock_router: bool,
 }
 
+#[allow(dead_code)]
 pub enum VpnSubnet {
     V4(Ipv4Net),
     V6(Ipv6Net),
@@ -106,6 +108,7 @@ impl Iptables {
         format!("{}", record_set.domain)
     }
 
+    #[allow(dead_code)]
     fn parse_comment(iptables_line: &str) -> Result<(ProxyRecord, String), String> {
         if iptables_line.is_empty() {
             return Err(String::from("empty"))
@@ -125,9 +128,9 @@ impl Iptables {
                 ));
         }
 
-        let original_addr = regex_caps[1].as_str();
-        let comment = regex_caps[2].as_str();
-        let mapped_addr = regex_caps[3].as_str();
+        // let original_addr = regex_caps[1].as_str();
+        // let comment = regex_caps[2].as_str();
+        // let mapped_addr = regex_caps[3].as_str();
 
         //Ok((ProxyRecord {
         //    original_addr,

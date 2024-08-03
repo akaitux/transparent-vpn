@@ -13,25 +13,27 @@ use ipnet::Ipv4Net;
 use tokio::sync::RwLock;
 use tracing::{debug, warn, error, info};
 
+use hickory_client::{
+    op::ResponseCode,
+};
 
-use trust_dns_server::{
+use hickory_proto::rr::{LowerName, RecordType, Name};
+
+use hickory_server::{
     authority::{
         Authority, LookupError, LookupOptions,
         MessageRequest, UpdateResult, ZoneType,
     },
-    client::{
-        op::ResponseCode,
-        rr::{LowerName, RecordType, Name},
-    },
     server::RequestInfo,
     store::forwarder::{ForwardLookup, ForwardConfig},
-    resolver::{
-        lookup::Lookup,
-        TokioAsyncResolver,
-        config::ResolverConfig,
-        TokioHandle,
-        error::{ResolveError, ResolveErrorKind},
-    }, proto::{op::Query, rr::Record},
+    proto::{op::Query, rr::Record},
+};
+
+use hickory_resolver::{
+    lookup::Lookup,
+    TokioAsyncResolver,
+    config::ResolverConfig,
+    error::{ResolveError, ResolveErrorKind},
 };
 
 use std::error::Error;
@@ -45,6 +47,7 @@ use super::{
 };
 
 
+#[allow(dead_code)]
 pub struct TrspAuthority {
     origin: LowerName,
     domains_set: ArcDomainsSet,
@@ -102,7 +105,7 @@ impl TrspAuthority {
         -> Result<Arc<TokioAsyncResolver>, Box<dyn Error>>
     {
         let name_servers = forward_config.name_servers.clone();
-        let mut options = forward_config.options.unwrap_or_default();
+        let mut options = forward_config.options.clone().unwrap_or_default();
 
         if !options.preserve_intermediates {
             warn!(
@@ -113,8 +116,7 @@ impl TrspAuthority {
         }
 
         let config = ResolverConfig::from_parts(None, vec![], name_servers);
-        let resolver = TokioAsyncResolver::new(config, options, TokioHandle)
-            .map_err(|e| format!("error constructing new Resolver: {}", e))?;
+        let resolver = TokioAsyncResolver::tokio(config, options);
 
         return Ok(Arc::new(resolver))
     }
@@ -201,7 +203,6 @@ impl TrspAuthority {
 
         let mut current_ips: Vec<IpAddr> = vec![];
         let mut lookup_ips: Vec<IpAddr> = vec![];
-        let mut lookup_cnames: Vec<IpAddr> = vec![];
 
 
         // Build lookup_ips vec
@@ -210,7 +211,7 @@ impl TrspAuthority {
                 continue
             }
             if let Some(data) = record.data() {
-                if let Some(ip) = data.to_ip_addr() {
+                if let Some(ip) = data.ip_addr() {
                     lookup_ips.push(ip)
                 } else {
                     info!("Something wrong, record doesn't contain ip: {} ; {:?}", record.name(), record.data());
@@ -296,7 +297,7 @@ impl TrspAuthority {
                 error!("Mapped ip set is empty");
                 return Err(ResolveError::from("Mapped ip set is empty"))
             };
-            let ip_addr = if let Some(ip) = record.data().unwrap().to_ip_addr() {
+            let ip_addr = if let Some(ip) = record.data().unwrap().ip_addr() {
                 ip
             } else {
                 info!("Something wrong, record not contains ip: {} ; {:?}", record.name(), record.data());

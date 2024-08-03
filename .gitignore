@@ -2,3 +2,4 @@ trsp/code/target
 trsp/code/config.toml
 trsp/code/front/node_modules
 trsp/code/front/dist
+trsp/code/workdir

@@ -5,7 +5,7 @@ use std::{
 };
 
 
-use trust_dns_server::client::rr::{LowerName, RecordType, RrKey};
+use hickory_proto::rr::{LowerName, RecordType, RrKey};
 
 use super::proxy_record::ProxyRecordSet;
 
@@ -51,28 +51,11 @@ impl InnerStorage {
         // this range covers all the records for any of the RecordTypes at a given label.
         let rrkey = RrKey::new(name.clone(), rtype.clone());
 
-        fn aname_covers_type(key_type: RecordType, query_type: RecordType) -> bool {
-            (query_type == RecordType::A || query_type == RecordType::AAAA)
-                && key_type == RecordType::ANAME
-        }
 
         if let Some(r) = self.records.get(&rrkey) {
             return Some(r.clone())
         }
 
-        // let lookup = self
-        //     .records
-        //     .range(&start_range_key..&end_range_key)
-        //     .find(|(key, _)| {
-        //         key.record_type == record_type|| aname_covers_type(key.record_type, record_type)
-        //     })
-        //     .map(|(_key, rr_set)| rr_set);
-
-        // TODO: maybe unwrap this recursion.
-        //match lookup {
-        //    None => self.inner_lookup_wildcard(name, record_type, lookup_options),
-        //    l => l.cloned(),
-        //}
         None
     }
 

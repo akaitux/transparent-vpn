@@ -33,9 +33,18 @@ features = ["derive", "env"]
 version = "1.3"
 features = ["cookie", "csrf", "embed", "session"]
 
-[dependencies.trust-dns-server]
-version="0.22.1"
-features = ["trust-dns-resolver", "dns-over-https-rustls", ]
+[dependencies.hickory-server]
+version="0.24.1"
+features = ["resolver", "dns-over-https-rustls", ]
+
+[dependencies.hickory-client]
+version="0.24.1"
+
+[dependencies.hickory-proto]
+version="0.24.1"
+
+[dependencies.hickory-resolver]
+version="0.24.1"
 
 
 [build-dependencies]

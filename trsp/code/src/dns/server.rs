@@ -11,10 +11,7 @@ use std::{
     time::Duration,
     str::FromStr,
 };
-use trust_dns_server::{
-    server::ServerFuture,
-    proto::error::ProtoError,
-};
+use hickory_server::server::ServerFuture;
 use reqwest::Url;
 
 use tracing::error;
@@ -54,7 +51,7 @@ impl<'a> DnsServer {
     // }
 
     pub async fn start(&mut self)
-        -> Result<JoinHandle<Result<(), ProtoError>>, Box<dyn Error>>
+        -> Result<JoinHandle<()>, Box<dyn Error>>
     {
         let domains_set = Arc::new(self.create_domains_set()?);
         self.domains_set = Some(domains_set.clone());
@@ -80,7 +77,12 @@ impl<'a> DnsServer {
             );
         }
 
-        let dns_join = tokio::spawn(server.block_until_done());
+        //let dns_join = tokio::spawn(server.block_until_done());
+        let dns_join = tokio::spawn({
+            async move {
+                server.block_until_done().await.unwrap();
+            }
+        });
 
         Ok(dns_join)
     }

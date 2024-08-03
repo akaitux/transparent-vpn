@@ -6,7 +6,6 @@ use std::{
     fs,
     time::Instant,
 };
-use poem::http::response;
 use tracing::{debug, info, error, warn};
 use tokio_stream::StreamExt;
 use reqwest::Url;
@@ -44,6 +43,7 @@ pub struct DomainsSet {
     pub zapret_nxdomains_txt_url: Option<Url>,
 }
 
+#[allow(dead_code)]
 impl DomainsSet {
     pub fn new(workdir: &PathBuf) -> Self {
         DomainsSet {

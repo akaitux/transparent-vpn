@@ -1,7 +1,7 @@
 // pub mod web_server;
 mod options;
 mod dns;
-mod web_server;
+//mod web_server;
 
 use clap::Parser;
 use std::{
@@ -117,8 +117,8 @@ async fn main() -> Result<(), Box<dyn Error>> {
     // sleep(Duration::from_secs(10)).await;
     // println!("!!!! > Wakeup!...");
 
-    let web_server = web_server::server::WebServer::new(&options);
-    let web_handler = web_server.start().await.expect("Web server init failed");
+    // let web_server = web_server::server::WebServer::new(&options);
+    // let web_handler = web_server.start().await.expect("Web server init failed");
 
     let dns_server = dns_server_arc.clone();
     tokio::spawn(async move {
@@ -140,18 +140,18 @@ async fn main() -> Result<(), Box<dyn Error>> {
     });
 
     tokio::select!  {
-        res = web_handler => {
-            // TODO: Откуда тут взялся еще один unwrap() ?
-            match res.unwrap() {
-                Ok(msg) => {
-                    warn!("Web server gracefully shutdown: {:?}", msg);
-                }
-                Err(msg) => {
-                    error!("Web server error: {:?}", msg);
-                    std::process::exit(1);
-                }
-            }
-        },
+        // res = web_handler => {
+        //     // TODO: Откуда тут взялся еще один unwrap() ?
+        //     match res.unwrap() {
+        //         Ok(msg) => {
+        //             warn!("Web server gracefully shutdown: {:?}", msg);
+        //         }
+        //         Err(msg) => {
+        //             error!("Web server error: {:?}", msg);
+        //             std::process::exit(1);
+        //         }
+        //     }
+        // },
         res = dns_handler => {
             match res {
                 Ok(msg) => {
