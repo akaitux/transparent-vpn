@@ -16,12 +16,8 @@ use hickory_proto::rr::{LowerName, RecordType, Name};
 
 use hickory_server::{
     authority::{
-        Authority, LookupError, LookupOptions,
-        MessageRequest, UpdateResult, ZoneType,
-    },
-    server::RequestInfo,
-    store::forwarder::{ForwardLookup, ForwardConfig},
-    proto::{op::Query, rr::Record},
+        Authority, LookupError, LookupObject, LookupOptions, MessageRequest, UpdateResult, ZoneType
+    }, proto::{op::Query, rr::Record}, server::RequestInfo, store::forwarder::{ForwardConfig, ForwardLookup}
 };
 
 use hickory_resolver::{
@@ -54,7 +50,7 @@ pub struct TrspAuthority {
     is_ipv6_mapping_enabled: bool,
     is_ipv6_forward_enabled: bool,
     cleanup_record_after_secs: Duration,
-    per_client_requests_set: HashMap<String, RequestSet>,
+    per_client_requests_set: RwLock<HashMap<String, RequestSet>>,
     //forwarder_cache: RwLock<HashMap<LowerName, ForwarderCacheRecord>>,
 }
 
@@ -88,14 +84,23 @@ impl TrspAuthority {
             is_ipv6_mapping_enabled: options.dns_enable_ipv6_mapping,
             is_ipv6_forward_enabled: options.dns_enable_ipv6_forward,
             cleanup_record_after_secs: Duration::from_secs(options.dns_cleanup_record_after_secs),
-            per_client_requests_set: HashMap::new(),
+            per_client_requests_set: RwLock::new(HashMap::new()),
             //forwarder_cache: RwLock::new(HashMap::with_capacity(FORWARDER_CACHE_SIZE)),
         };
         Ok(this)
     }
 
-    fn save_response(&self, request_info: &RequestInfo, response: &ForwardLookup) {
-        error!("YOBA123123")
+    async fn save_response(&self, request_info: &RequestInfo<'_>, response: &ForwardLookup) {
+        error!("YOBA123123");
+        let src: String = request_info.src.to_string();
+        if !self.per_client_requests_set.read().await.contains_key(&src) {
+            self.per_client_requests_set.write().await.insert(src.clone(), RequestSet::new());
+        }
+        let mut request_set = self.per_client_requests_set.read().await.get(&src).unwrap();
+
+        for record in response.iter() {
+            request_set.insert_record(&record);
+        }
     }
 
     fn create_forwarder(forward_config: &ForwardConfig)
@@ -474,7 +479,7 @@ impl Authority for TrspAuthority {
         )
         .await;
         if let Ok(r) = &resp {
-            self.save_response(&request_info, r);
+            self.save_response(&request_info, r).await;
         }
         return resp
     }
