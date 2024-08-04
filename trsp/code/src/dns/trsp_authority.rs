@@ -1,10 +1,5 @@
 use std::{
-    io,
-    time::Instant,
-    str::FromStr,
-    collections::VecDeque,
-    sync::Arc,
-    net::{Ipv4Addr, IpAddr},
+    collections::{HashMap, VecDeque}, io, net::{IpAddr, Ipv4Addr}, str::FromStr, sync::Arc, time::Instant
 };
 
 use chrono::Utc;
@@ -40,10 +35,7 @@ use std::error::Error;
 use crate::options::Options;
 
 use super::{
-    domains_set::ArcDomainsSet,
-    inner_storage::InnerStorage,
-    proxy_record::{ProxyRecordSet, ProxyRecord},
-    router::{Router, Iptables, VpnSubnet}
+    domains_set::ArcDomainsSet, inner_storage::InnerStorage, proxy_record::{ProxyRecord, ProxyRecordSet}, request_set::RequestSet, router::{Iptables, Router, VpnSubnet}
 };
 
 
@@ -62,6 +54,7 @@ pub struct TrspAuthority {
     is_ipv6_mapping_enabled: bool,
     is_ipv6_forward_enabled: bool,
     cleanup_record_after_secs: Duration,
+    per_client_requests_set: HashMap<String, RequestSet>,
     //forwarder_cache: RwLock<HashMap<LowerName, ForwarderCacheRecord>>,
 }
 
@@ -95,11 +88,15 @@ impl TrspAuthority {
             is_ipv6_mapping_enabled: options.dns_enable_ipv6_mapping,
             is_ipv6_forward_enabled: options.dns_enable_ipv6_forward,
             cleanup_record_after_secs: Duration::from_secs(options.dns_cleanup_record_after_secs),
+            per_client_requests_set: HashMap::new(),
             //forwarder_cache: RwLock::new(HashMap::with_capacity(FORWARDER_CACHE_SIZE)),
         };
         Ok(this)
     }
 
+    fn save_response(&self, request_info: &RequestInfo, response: &ForwardLookup) {
+        error!("YOBA123123")
+    }
 
     fn create_forwarder(forward_config: &ForwardConfig)
         -> Result<Arc<TokioAsyncResolver>, Box<dyn Error>>
@@ -470,13 +467,16 @@ impl Authority for TrspAuthority {
         request_info: RequestInfo<'_>,
         lookup_options: LookupOptions,
     ) -> Result<Self::Lookup, LookupError> {
-        error!("YOBA!!!!1122 {:?}", request_info.src);
-        self.lookup(
+        let resp = self.lookup(
             request_info.query.name(),
             request_info.query.query_type(),
             lookup_options,
         )
-        .await
+        .await;
+        if let Ok(r) = &resp {
+            self.save_response(&request_info, r);
+        }
+        return resp
     }
 
     async fn get_nsec_records(
