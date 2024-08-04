@@ -1,18 +1,20 @@
 use std::{
-    error::Error,
-    collections::HashMap,
-    sync::Arc,
+    collections::HashMap, error::Error, sync::{Arc, RwLock}
 };
 
 
 use hickory_proto::rr::{LowerName, RecordType, RrKey};
+use hickory_server::server::RequestInfo;
 
-use super::proxy_record::ProxyRecordSet;
+use super::{proxy_record::ProxyRecordSet, request_set::RequestSet};
+
+use tracing::error;
 
 
 #[derive(Default)]
 pub struct InnerStorage {
     records: HashMap<RrKey, Arc<ProxyRecordSet>>,
+    per_client_requests_set: HashMap<String, HashMap<RrKey, Arc<ProxyRecordSet>>>,
     // internal_ip_to_record: HashMap<IpAddr, RrKey>,
 }
 
@@ -21,6 +23,7 @@ impl InnerStorage {
     pub fn new() -> Self {
         Self {
             records: HashMap::new(),
+            per_client_requests_set: HashMap::new(),
             // internal_ip_to_record: HashMap::new(),
         }
     }
@@ -29,17 +32,51 @@ impl InnerStorage {
         self.inner_lookup(name, rtype)
     }
 
+    pub fn get_records_by_client(&self, client: &String) -> Option<Vec<String>> {
+        let client_set = self.per_client_requests_set.get(client);
+        if client_set == None {
+            error!("NO CLIENT SET for {:?}", client);
+            return None
+        }
+        let client_set = client_set.unwrap();
+
+        let mut ips: Vec<String> = vec!();
+
+        for (_, rset) in client_set.iter() {
+            for record in rset.records() {
+                if let Some(a) = record.original_addr {
+                    ips.push(a.to_string());
+                }
+            }
+        }
+        Some(ips)
+    }
+
     pub fn upsert(
         &mut self,
         name: &LowerName,
         rtype: RecordType,
-        records_set: &ProxyRecordSet
+        records_set: &ProxyRecordSet,
+        request_info: Option<&RequestInfo<'_>>,
     ) -> Result<Arc<ProxyRecordSet>, Box<dyn Error>> {
         let records_set = Arc::from(records_set.clone());
+        let rrkey = RrKey::new(name.clone(), rtype.clone());
+
         self.records.insert(
-            RrKey::new(name.clone(), rtype.clone()),
+            rrkey.clone(),
             records_set.clone(),
         );
+        if let Some(r) = request_info {
+            let src = r.src.ip().to_string();
+            if !self.per_client_requests_set.contains_key(&src) {
+                self.per_client_requests_set.insert(src.clone(), HashMap::new());
+            }
+            let client_set = self.per_client_requests_set.get_mut(&src).unwrap();
+            client_set.insert(
+                rrkey.clone(),
+                records_set.clone(),
+            );
+        }
         Ok(records_set)
     }
 

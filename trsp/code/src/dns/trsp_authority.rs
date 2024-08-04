@@ -31,7 +31,7 @@ use std::error::Error;
 use crate::options::Options;
 
 use super::{
-    domains_set::ArcDomainsSet, inner_storage::InnerStorage, proxy_record::{ProxyRecord, ProxyRecordSet}, request_set::RequestSet, router::{Iptables, Router, VpnSubnet}
+    domains_set::ArcDomainsSet, inner_storage::InnerStorage, proxy_record::{ProxyRecord, ProxyRecordSet}, router::{Iptables, Router, VpnSubnet}
 };
 
 
@@ -50,7 +50,6 @@ pub struct TrspAuthority {
     is_ipv6_mapping_enabled: bool,
     is_ipv6_forward_enabled: bool,
     cleanup_record_after_secs: Duration,
-    per_client_requests_set: RwLock<HashMap<String, RequestSet>>,
     //forwarder_cache: RwLock<HashMap<LowerName, ForwarderCacheRecord>>,
 }
 
@@ -84,24 +83,61 @@ impl TrspAuthority {
             is_ipv6_mapping_enabled: options.dns_enable_ipv6_mapping,
             is_ipv6_forward_enabled: options.dns_enable_ipv6_forward,
             cleanup_record_after_secs: Duration::from_secs(options.dns_cleanup_record_after_secs),
-            per_client_requests_set: RwLock::new(HashMap::new()),
             //forwarder_cache: RwLock::new(HashMap::with_capacity(FORWARDER_CACHE_SIZE)),
         };
         Ok(this)
     }
 
-    async fn save_response(&self, request_info: &RequestInfo<'_>, response: &ForwardLookup) {
-        let src: String = request_info.src.to_string();
-        if !self.per_client_requests_set.read().await.contains_key(&src) {
-            self.per_client_requests_set.write().await.insert(src.clone(), RequestSet::new());
+    async fn trsp_lookup(
+        &self,
+        name: &LowerName,
+        rtype: RecordType,
+        _lookup_options: LookupOptions,
+        request_info: Option<&RequestInfo<'_>>,
+
+    ) -> Result<ForwardLookup, LookupError> {
+    // Returns mapped ForwardLookup,  real ForwardLookup
+
+        match rtype {
+            RecordType::AAAA => {
+                if ! self.is_ipv6_forward_enabled {
+                    warn!("Ipv6 forward disabled: {} {}", name, rtype);
+                    return Err(LookupError::ResponseCode(ResponseCode::NXDomain))
+                }
+            },
+            _ => (),
         }
 
-        let request_sets = self.per_client_requests_set.read().await;
-        let request_set = request_set.get(&src).unwrap();
+        // TODO: make this an error?
+        debug_assert!(self.origin.zone_of(name));
 
-        for record in response.iter() {
-            request_set.insert_record(&record);
-        }
+        debug!("forwarding lookup: {} {}", name, rtype);
+
+        let mapping_resolve = self.inner_storage_lookup(&name, rtype).await;
+        let resolve = if let Err(e) = mapping_resolve {
+            match e.kind() {
+                 ResolveErrorKind::Message("Not Found") => {
+                    debug!("Not found '{}' {}' in internal storage", rtype, name);
+                    if self.domains_set.is_domain_blocked(name.to_string().as_ref()).await {
+                        self.add_blocked_domain(name, rtype, request_info).await
+                    } else {
+                        // self.forwarder.lookup(name.clone(), rtype).await
+                        self.forwarder_lookup(name.clone(), rtype).await
+
+                    }
+
+                }
+                _ => {
+                    error!("Error while resolving with internal storage: {}", e);
+                    //self.forwarder.lookup(name.clone(), rtype).await
+                    self.forwarder_lookup(name.clone(), rtype).await
+                }
+            }
+        } else {
+            mapping_resolve
+        };
+
+        resolve.map(ForwardLookup).map_err(LookupError::from)
     }
 
     fn create_forwarder(forward_config: &ForwardConfig)
@@ -192,7 +228,13 @@ impl TrspAuthority {
         true
     }
 
-    async fn update_record(&self, name: &LowerName, rtype: RecordType, record_set: &ProxyRecordSet)
+    async fn update_record(
+        &self,
+        name: &LowerName,
+        rtype: RecordType,
+        record_set: &ProxyRecordSet,
+        request_info: Option<&RequestInfo<'_>>,
+    )
         -> Result<Lookup, ResolveError>
     {
         // TODO UPDATE
@@ -252,7 +294,7 @@ impl TrspAuthority {
             return Err(ResolveError::from("internal_error"))
         }
 
-        if let Err(e) = inner_storage.upsert(name, rtype, &record_set) {
+        if let Err(e) = inner_storage.upsert(name, rtype, &record_set, request_info) {
             error!(
                 "Error while adding ProxyRecordSet to inner storage for domain '{}': {}",
                 name, e
@@ -286,7 +328,7 @@ impl TrspAuthority {
             if record.record_type() == RecordType::CNAME {
                 let proxy_record = ProxyRecord::new(record, None, None);
                 if let Err(e) = record_set.push(&proxy_record) {
-                    error!(
+                    debug!(
                         "Record already exists ({}): r: {:?}, set: {:?}",
                         e, proxy_record, record_set,
                     );
@@ -314,7 +356,7 @@ impl TrspAuthority {
             );
 
             if let Err(e) = record_set.push(&proxy_record) {
-                error!(
+                debug!(
                     "Record already exists ({}): r: {:?}, set: {:?}",
                     e, proxy_record, record_set,
                 );
@@ -336,7 +378,7 @@ impl TrspAuthority {
         }
     }
 
-    pub async fn add_blocked_domain(&self, name: &LowerName, rtype: RecordType)
+    pub async fn add_blocked_domain(&self, name: &LowerName, rtype: RecordType, request_info: Option<&RequestInfo<'_>>)
         -> Result<Lookup, ResolveError>
     {
         info!("Add blocked domain: {} ; {}", name, rtype);
@@ -345,7 +387,7 @@ impl TrspAuthority {
         if let Some(r) = inner_storage.find(name, rtype) {
             drop(inner_storage);
             info!("Domain already exists, update: {} ; {}", name, rtype);
-            return self.update_record(name, rtype, &r).await
+            return self.update_record(name, rtype, &r, request_info).await
         }
         drop(inner_storage);
 
@@ -372,7 +414,7 @@ impl TrspAuthority {
             return Err(ResolveError::from("internal_error"))
         }
 
-        if let Err(e) = inner_storage.upsert(name, rtype, &record_set) {
+        if let Err(e) = inner_storage.upsert(name, rtype, &record_set, request_info) {
             error!(
                 "Error while adding ProxyRecordSet to inner storage for domain '{}': {}",
                 name, e
@@ -424,64 +466,40 @@ impl Authority for TrspAuthority {
         &self,
         name: &LowerName,
         rtype: RecordType,
-        _lookup_options: LookupOptions,
+        lookup_options: LookupOptions,
     ) -> Result<Self::Lookup, LookupError> {
-
-        match rtype {
-            RecordType::AAAA => {
-                if ! self.is_ipv6_forward_enabled {
-                    warn!("Ipv6 forward disabled: {} {}", name, rtype);
-                    return Err(LookupError::ResponseCode(ResponseCode::NXDomain))
-                }
-            },
-            _ => (),
-        }
-
-        // TODO: make this an error?
-        debug_assert!(self.origin.zone_of(name));
-
-        debug!("forwarding lookup: {} {}", name, rtype);
-
-        let mapping_resolve = self.inner_storage_lookup(&name, rtype).await;
-        let resolve = if let Err(e) = mapping_resolve {
-            match e.kind() {
-                 ResolveErrorKind::Message("Not Found") => {
-                    debug!("Not found '{}' {}' in internal storage", rtype, name);
-                    if self.domains_set.is_domain_blocked(name.to_string().as_ref()).await {
-                        self.add_blocked_domain(name, rtype).await
-                    } else {
-                        // self.forwarder.lookup(name.clone(), rtype).await
-                        self.forwarder_lookup(name.clone(), rtype).await
-                    }
-
-                }
-                _ => {
-                    error!("Error while resolving with internal storage: {}", e);
-                    //self.forwarder.lookup(name.clone(), rtype).await
-                    self.forwarder_lookup(name.clone(), rtype).await
-                }
-            }
-        } else {
-            mapping_resolve
-        };
-
-        resolve.map(ForwardLookup).map_err(LookupError::from)
+        let result = self.trsp_lookup(name, rtype, lookup_options, None).await;
+        result
     }
+
 
     async fn search(
         &self,
         request_info: RequestInfo<'_>,
         lookup_options: LookupOptions,
     ) -> Result<Self::Lookup, LookupError> {
-        let resp = self.lookup(
+        let resp = self.trsp_lookup(
             request_info.query.name(),
             request_info.query.query_type(),
             lookup_options,
+            Some(&request_info),
         )
         .await;
-        if let Ok(r) = &resp {
-            self.save_response(&request_info, r).await;
+
+        //For test
+        let store = self.inner_storage.read().await;
+        let ips = store.get_records_by_client(&request_info.src.ip().to_string());
+        error!("YOBA -----");
+        if let Some(i) = ips {
+            for ip in i {
+                error!("YOBA IPS: {:?}", ip);
+            }
         }
+        // if let Ok(r) = &resp {
+        //     if !is_mapped {
+        //         self.save_response(&request_info, r).await;
+        //     }
+        // }
         return resp
     }
 
