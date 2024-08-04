@@ -18,8 +18,8 @@ impl RequestSet {
 
     pub fn insert_record(&self, record: &Record) {
         match record.record_type() {
-            RecordType::A => error!("YOBA INSERT A")
-            _ => {}
+            RecordType::A => error!("YOBA INSERT A {:?}", record.to_string()),
+            _ => {},
         }
     }
 }

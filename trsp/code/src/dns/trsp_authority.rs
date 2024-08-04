@@ -91,12 +91,13 @@ impl TrspAuthority {
     }
 
     async fn save_response(&self, request_info: &RequestInfo<'_>, response: &ForwardLookup) {
-        error!("YOBA123123");
         let src: String = request_info.src.to_string();
         if !self.per_client_requests_set.read().await.contains_key(&src) {
             self.per_client_requests_set.write().await.insert(src.clone(), RequestSet::new());
         }
-        let mut request_set = self.per_client_requests_set.read().await.get(&src).unwrap();
+
+        let request_sets = self.per_client_requests_set.read().await;
+        let request_set = request_sets.get(&src).unwrap();
 
         for record in response.iter() {
             request_set.insert_record(&record);
