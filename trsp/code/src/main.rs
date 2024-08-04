@@ -92,17 +92,9 @@ async fn main() -> Result<(), Box<dyn Error>> {
         Err(err) => panic!("Error while setup workdir: {}", err),
     };
 
-    // let mapping_subnet = match options.mapping_subnet.parse::<Ipv4Net>() {
-    //     Ok(s) => s,
-    //     Err(e) => {
-    //         error!("Error while parsing MAPPING_SUBNET: {}", e);
-    //         process::exit(1)
-    //     }
-    // };
-
     let dns_workdir = workdir.join("dns");
-    let dns_server_arc = Arc::new(Mutex::new(dns::server::DnsServer::new(&options, &dns_workdir)));
-    let dns_server = dns_server_arc.clone();
+    let dns_server = Arc::new(Mutex::new(dns::server::DnsServer::new(&options, &dns_workdir)));
+    //let dns_server = dns_server_arc.clone();
     let dns_handler = match dns_server.lock().await.start().await {
         Ok(dns_handler) => dns_handler,
         Err(err) => {
@@ -120,7 +112,6 @@ async fn main() -> Result<(), Box<dyn Error>> {
     // let web_server = web_server::server::WebServer::new(&options);
     // let web_handler = web_server.start().await.expect("Web server init failed");
 
-    let dns_server = dns_server_arc.clone();
     tokio::spawn(async move {
         let mut s_hangup = signal(SignalKind::hangup()).unwrap();
 

@@ -153,7 +153,6 @@ impl Handler {
         if request.message_type() != MessageType::Query {
             return Err(DnsError::InvalidMessageType(request.message_type()));
         }
-        // TODO: Зачем тут OK
         Ok(self.trsp_authority.handle_request(request, response).await)
     }
 }

@@ -1,10 +1,5 @@
 use std::{
-    error::Error,
-    path::{Path, PathBuf},
-    sync::Arc,
-    env,
-    fs,
-    time::Instant,
+    collections::HashMap, env, error::Error, fs, path::{Path, PathBuf}, sync::Arc, time::Instant
 };
 use tracing::{debug, info, error, warn};
 use tokio_stream::StreamExt;
@@ -12,7 +7,7 @@ use reqwest::Url;
 use encoding_rs::WINDOWS_1251;
 use lazy_static::lazy_static;
 use regex::Regex;
-use super::domains::{Domains, Domain};
+use super::{domains::{Domain, Domains}, request_set::RequestSet};
 use tokio::{
     io::{BufReader, AsyncBufReadExt, BufWriter, AsyncWriteExt},
     sync::RwLock,
@@ -40,6 +35,7 @@ pub struct DomainsSet {
     pub workdir: PathBuf,
     pub zapret_domains_csv_url: Option<Url>,
     pub zapret_nxdomains_txt_url: Option<Url>,
+    per_client_requests_set: HashMap<String, RequestSet>,
 }
 
 #[allow(dead_code)]
@@ -52,6 +48,7 @@ impl DomainsSet {
             workdir: workdir.clone(),
             zapret_domains_csv_url: None,
             zapret_nxdomains_txt_url: None,
+            per_client_requests_set: HashMap::new(),
         }
     }
 

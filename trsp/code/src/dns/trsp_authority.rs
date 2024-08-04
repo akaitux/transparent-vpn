@@ -470,6 +470,7 @@ impl Authority for TrspAuthority {
         request_info: RequestInfo<'_>,
         lookup_options: LookupOptions,
     ) -> Result<Self::Lookup, LookupError> {
+        error!("YOBA!!!!1122 {:?}", request_info.src);
         self.lookup(
             request_info.query.name(),
             request_info.query.query_type(),
