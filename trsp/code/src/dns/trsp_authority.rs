@@ -97,7 +97,7 @@ impl TrspAuthority {
         }
 
         let request_sets = self.per_client_requests_set.read().await;
-        let request_set = request_sets.get(&src).unwrap();
+        let request_set = request_set.get(&src).unwrap();
 
         for record in response.iter() {
             request_set.insert_record(&record);
@@ -125,7 +125,7 @@ impl TrspAuthority {
     }
 
 
-    pub async fn inner_lookup(&self, name: &LowerName, rtype: RecordType)
+    pub async fn inner_storage_lookup(&self, name: &LowerName, rtype: RecordType)
         -> Result<Lookup, ResolveError>
     {
         match rtype {
@@ -442,7 +442,7 @@ impl Authority for TrspAuthority {
 
         debug!("forwarding lookup: {} {}", name, rtype);
 
-        let mapping_resolve = self.inner_lookup(&name, rtype).await;
+        let mapping_resolve = self.inner_storage_lookup(&name, rtype).await;
         let resolve = if let Err(e) = mapping_resolve {
             match e.kind() {
                  ResolveErrorKind::Message("Not Found") => {
