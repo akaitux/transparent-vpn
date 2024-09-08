@@ -9,6 +9,6 @@ HOME=/
 02 4 * * * root /opt/bin/run-parts /opt/etc/cron.daily
 22 4 * * 0 root /opt/bin/run-parts /opt/etc/cron.weekly
 42 4 1 * * root /opt/bin/run-parts /opt/etc/cron.monthly
-32 2 * * * root sh /opt/bin/adblock_update.sh
+#32 2 * * * root sh /opt/bin/adblock_update.sh
 0 3 * * * root /opt/etc/init.d/S09dnscrypt-proxy2  restart
-*/1 * * * * root /opt/bin/check_vpn_dns.sh
+#*/1 * * * * root /opt/bin/check_vpn_dns.sh
