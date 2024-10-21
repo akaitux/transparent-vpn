@@ -23,7 +23,7 @@ fi
 
 is_interface_up=`ip a show "$WG_IF" up | grep UP &>/dev/null ; echo $?`
 
-if [ "$link" == "up" ] && [ "$connected" == "yes" ]; then
+if [ "$is_interface_up" -eq "0" ]; then
   if ! $iptables_check_cmd; then
     `$iptables_add_cmd`
   else
